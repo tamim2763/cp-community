@@ -1,0 +1,125 @@
+import type { Metadata } from "next";
+import { prisma } from "@/lib/prisma";
+
+export const metadata: Metadata = { title: "Jobs & Internships" };
+export const revalidate = 600;
+
+const TYPE_LABELS: Record<string, string> = {
+  INTERNSHIP: "Internship",
+  FULL_TIME: "Full-time",
+  PART_TIME: "Part-time",
+  CONTRACT: "Contract",
+  REMOTE: "Remote",
+};
+
+const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
+  INTERNSHIP: { bg: "rgba(59,130,246,0.1)", color: "var(--accent-2)" },
+  FULL_TIME: { bg: "var(--success-soft)", color: "var(--success)" },
+  PART_TIME: { bg: "var(--warning-soft)", color: "var(--warning)" },
+  CONTRACT: { bg: "rgba(201,124,65,0.1)", color: "var(--bronze)" },
+  REMOTE: { bg: "rgba(103,232,249,0.1)", color: "var(--diamond-2)" },
+};
+
+export default async function JobsPage() {
+  const jobs = await prisma.job.findMany({
+    where: { isActive: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return (
+    <div className="page-container">
+      <div className="page-header">
+        <h1 className="page-title">💼 Jobs &amp; Internships</h1>
+        <p className="page-subtitle">
+          Opportunities posted for our CP community members
+        </p>
+      </div>
+
+      {jobs.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-icon">💼</div>
+          <div className="empty-title">No listings yet</div>
+          <div className="empty-text">
+            Admins will post opportunities here. Stay tuned!
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gap: 16 }}>
+          {jobs.map((job) => {
+            const typeColor = TYPE_COLORS[job.type] ?? TYPE_COLORS.INTERNSHIP;
+            const isExpired = job.deadline && new Date(job.deadline) < new Date();
+
+            return (
+              <div
+                key={job.id}
+                className="card card-hover"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                  opacity: isExpired ? 0.6 : 1,
+                }}
+              >
+                <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: "1.05rem", color: "var(--text)" }}>
+                      {job.title}
+                    </div>
+                    <div style={{ fontSize: "0.875rem", color: "var(--text-2)", marginTop: 2 }}>
+                      {job.company}
+                      {job.location && (
+                        <span style={{ color: "var(--text-3)" }}> · {job.location}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        ...typeColor,
+                        padding: "4px 10px",
+                        borderRadius: 999,
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {TYPE_LABELS[job.type]}
+                    </span>
+                    {isExpired && (
+                      <span className="badge badge-danger" style={{ fontSize: "0.7rem" }}>Expired</span>
+                    )}
+                  </div>
+                </div>
+
+                <p style={{ fontSize: "0.875rem", color: "var(--text-2)", lineHeight: 1.6, margin: 0 }}>
+                  {job.description}
+                </p>
+
+                <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                  <div style={{ fontSize: "0.775rem", color: "var(--text-3)" }}>
+                    {job.deadline
+                      ? `Deadline: ${new Date(job.deadline).toLocaleDateString("en-GB", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}`
+                      : "No deadline specified"}
+                  </div>
+                  {job.applyUrl && !isExpired && (
+                    <a
+                      href={job.applyUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-primary btn-sm"
+                    >
+                      Apply →
+                    </a>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,580 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+provider = "postgresql"
+url = env("DATABASE_URL")
+directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum CpPlatform {
+  CODEFORCES
+  CODECHEF
+  ATCODER
+}
+
+enum ProfileStatus {
+  PENDING
+  ACTIVE
+  ERROR
+}
+
+enum AchievementStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  HIDDEN
+}
+
+enum DifficultyLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum ChatRoomType {
+  PUBLIC
+  PRIVATE
+  ANNOUNCEMENT
+}
+
+enum ChatRoomMemberRole {
+  MEMBER
+  MODERATOR
+  OWNER
+}
+
+enum ChatMessageType {
+  TEXT
+  IMAGE
+  FILE
+  SYSTEM
+}
+
+enum ContestSource {
+  CLIST
+  MANUAL
+  CODEFORCES
+  CODECHEF
+  ATCODER
+  OTHER
+}
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  username      String?  @unique
+  email         String   @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  avatarUrl     String?
+  bio           String?
+  universityId  String?
+  batch         String?
+  department    String?
+  role          UserRole @default(USER)
+  prizeMoneyWon Decimal  @default(0) @db.Decimal(12, 2)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  accounts                    Account[]
+  sessions                    Session[]
+  cpProfiles                  CpProfile[]
+  submissions                 Submission[]
+  problemSolves               ProblemSolve[]
+  weeklyScores                WeeklyScore[]
+  dailyStats                  DailyUserStat[]
+  achievements                Achievement[]           @relation("AchievementAuthor")
+  approvedAchievements        Achievement[]           @relation("AchievementApprovedBy")
+  createdMotivationalProfiles MotivationalProfile[]   @relation("MotivationalProfileCreatedBy")
+  updatedMotivationalProfiles MotivationalProfile[]   @relation("MotivationalProfileUpdatedBy")
+  createdResources            Resource[]              @relation("ResourceCreatedBy")
+  updatedResources            Resource[]              @relation("ResourceUpdatedBy")
+  createdChatRooms            ChatRoom[]              @relation("ChatRoomCreatedBy")
+  chatRoomMemberships         ChatRoomMember[]
+  chatMessages                ChatMessage[]           @relation("ChatMessageAuthor")
+  adminLogs                   AdminLog[]              @relation("AdminLogActor")
+  reportsFiled                Report[]                @relation("ReportFiledBy")
+  reportsReviewed             Report[]                @relation("ReportReviewedBy")
+  jobsPosted                  Job[]                   @relation("JobPostedBy")
+  feedbacksFiled              Feedback[]              @relation("FeedbackFiledBy")
+  prizePayouts                PrizePayout[]           @relation("PrizePayoutUser")
+  prizePayoutsCreated         PrizePayout[]           @relation("PrizePayoutCreatedBy")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model CpProfile {
+  id                      String        @id @default(cuid())
+  userId                  String
+  platform                CpPlatform
+  handle                  String
+  displayHandle           String?
+  currentRating           Int?
+  maxRating               Int?
+  rankTitle               String?
+  country                 String?
+  avatarUrl               String?
+  isVerified              Boolean       @default(false)
+  verificationToken       String?
+  verificationField       String?
+  verificationRequestedAt DateTime?
+  verifiedAt              DateTime?
+  isPublic                Boolean       @default(true)
+  lastFetchedAt           DateTime?
+  lastSubmissionFetchedAt DateTime?
+  status                  ProfileStatus @default(PENDING)
+  syncError               String?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  submissions  Submission[]
+  problemSolves ProblemSolve[]
+
+  @@unique([userId, platform])
+  @@unique([platform, handle])
+  @@index([userId])
+  @@index([platform, handle])
+}
+
+model Submission {
+  id                   String     @id @default(cuid())
+  userId               String
+  cpProfileId          String
+  platform             CpPlatform
+  externalSubmissionId String
+  externalContestId    String?
+  externalProblemId    String
+  problemName          String
+  problemSlug          String?
+  problemUrl           String?
+  problemRating        Int?
+  problemTags          Json?
+  language             String?
+  verdict              String
+  submittedAt          DateTime
+  isAccepted           Boolean
+  rawPayload           Json
+  createdAt            DateTime   @default(now())
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cpProfile     CpProfile     @relation(fields: [cpProfileId], references: [id], onDelete: Cascade)
+  firstSolveFor ProblemSolve?
+
+  @@unique([platform, externalSubmissionId])
+  @@index([userId, submittedAt])
+  @@index([cpProfileId, submittedAt])
+  @@index([platform, submittedAt])
+  @@index([isAccepted, submittedAt])
+}
+
+model ProblemSolve {
+  id                        String     @id @default(cuid())
+  userId                    String
+  cpProfileId               String
+  platform                  CpPlatform
+  externalProblemId         String
+  problemName               String
+  problemRating             Int?
+  firstAcceptedSubmissionId String     @unique
+  firstSolvedAt             DateTime
+  lastSeenAt                DateTime
+  createdAt                 DateTime   @default(now())
+  updatedAt                 DateTime   @updatedAt
+
+  user                    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cpProfile               CpProfile  @relation(fields: [cpProfileId], references: [id], onDelete: Cascade)
+  firstAcceptedSubmission Submission @relation(fields: [firstAcceptedSubmissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platform, externalProblemId])
+  @@index([userId, firstSolvedAt])
+  @@index([platform, firstSolvedAt])
+  @@index([cpProfileId])
+}
+
+model WeeklyScore {
+  id                      String   @id @default(cuid())
+  userId                  String
+  weekStart               DateTime
+  weekEnd                 DateTime
+  rawSolvedCount          Int      @default(0)
+  weightedScore           Decimal  @default(0) @db.Decimal(10, 2)
+  codeforcesSolvedCount   Int      @default(0)
+  codechefSolvedCount     Int      @default(0)
+  atcoderSolvedCount      Int      @default(0)
+  codeforcesWeightedScore Decimal  @default(0) @db.Decimal(10, 2)
+  codechefWeightedScore   Decimal  @default(0) @db.Decimal(10, 2)
+  atcoderWeightedScore    Decimal  @default(0) @db.Decimal(10, 2)
+  streakAtWeekEnd         Int      @default(0)
+  rankSnapshot            Int?
+  computedAt              DateTime
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart])
+  @@index([weekStart, weightedScore])
+  @@index([userId])
+}
+
+model DailyUserStat {
+  id                      String   @id @default(cuid())
+  userId                  String
+  date                    DateTime @db.Date
+  solvedCount             Int      @default(0)
+  weightedScore           Decimal  @default(0) @db.Decimal(10, 2)
+  acceptedSubmissionCount Int      @default(0)
+  streakContinues         Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+model Achievement {
+  id              String            @id @default(cuid())
+  userId          String
+  title           String?
+  caption         String
+  imageUrl        String
+  imagePublicId   String?
+  platform        CpPlatform?
+  achievementDate DateTime?         @db.Date
+  status          AchievementStatus @default(PENDING)
+  rejectionReason String?
+  approvedById    String?
+  approvedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  user       User  @relation("AchievementAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  approvedBy User? @relation("AchievementApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@index([approvedById])
+}
+
+model MotivationalProfile {
+  id               String   @id @default(cuid())
+  name             String
+  headline         String?
+  bio              String
+  imageUrl         String?
+  linkedinUrl      String
+  batchYear        Int?
+  department       String?
+  achievementsText String?
+  sortOrder        Int      @default(0)
+  isFeatured       Boolean  @default(false)
+  isPublished      Boolean  @default(true)
+  createdById      String?
+  updatedById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  createdBy User? @relation("MotivationalProfileCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User? @relation("MotivationalProfileUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([isPublished, sortOrder])
+  @@index([createdById])
+  @@index([updatedById])
+}
+
+model ResourceCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  resources Resource[]
+
+  @@index([sortOrder])
+}
+
+model Resource {
+  id              String           @id @default(cuid())
+  title           String
+  slug            String           @unique
+  description     String
+  url             String
+  categoryId      String?
+  platform        String?
+  difficultyLevel DifficultyLevel?
+  tags            Json?
+  thumbnailUrl    String?
+  isPublished     Boolean          @default(true)
+  sortOrder       Int              @default(0)
+  createdById     String?
+  updatedById     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  category  ResourceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdBy User?             @relation("ResourceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?             @relation("ResourceUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([isPublished, sortOrder])
+  @@index([categoryId, isPublished])
+  @@index([createdById])
+  @@index([updatedById])
+}
+
+model Contest {
+  id              String        @id @default(cuid())
+  source          ContestSource
+  externalId      String?
+  title           String
+  platform        CpPlatform?
+  url             String
+  startTime       DateTime
+  endTime         DateTime?
+  durationMinutes Int?
+  registrationUrl String?
+  isFeatured      Boolean       @default(false)
+  isVisible       Boolean       @default(true)
+  importedAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([source, externalId])
+  @@index([startTime])
+  @@index([platform, startTime])
+}
+
+model ChatRoom {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String?      @unique
+  type        ChatRoomType @default(PUBLIC)
+  description String?
+  createdById String?
+  isArchived  Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  createdBy User?            @relation("ChatRoomCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  members   ChatRoomMember[]
+  messages  ChatMessage[]
+
+  @@index([createdById])
+}
+
+model ChatRoomMember {
+  id       String             @id @default(cuid())
+  roomId   String
+  userId   String
+  role     ChatRoomMemberRole @default(MEMBER)
+  joinedAt DateTime           @default(now())
+
+  room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([userId])
+}
+
+model ChatMessage {
+  id               String          @id @default(cuid())
+  roomId           String
+  userId           String
+  messageText      String?
+  messageType      ChatMessageType @default(TEXT)
+  replyToMessageId String?
+  isEdited         Boolean         @default(false)
+  editedAt         DateTime?
+  deletedAt        DateTime?
+  createdAt        DateTime        @default(now())
+
+  room           ChatRoom             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user           User                 @relation("ChatMessageAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  replyToMessage ChatMessage?         @relation("MessageReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies        ChatMessage[]        @relation("MessageReplies")
+  attachments    MessageAttachment[]
+
+  @@index([roomId, createdAt])
+  @@index([userId, createdAt])
+  @@index([replyToMessageId])
+}
+
+model MessageAttachment {
+  id              String   @id @default(cuid())
+  messageId       String
+  fileUrl         String
+  fileName        String
+  fileType        String
+  fileSize        Int
+  thumbnailUrl    String?
+  storageProvider String?
+  createdAt       DateTime @default(now())
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
+model AdminLog {
+  id          String   @id @default(cuid())
+  adminUserId String
+  actionType  String
+  targetType  String
+  targetId    String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  adminUser User @relation("AdminLogActor", fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, createdAt])
+  @@index([targetType, targetId])
+}
+
+model Report {
+  id           String   @id @default(cuid())
+  reportedById String
+  targetType   String
+  targetId     String
+  reason       String
+  status       String   @default("OPEN")
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  reportedBy User  @relation("ReportFiledBy", fields: [reportedById], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("ReportReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([reportedById, createdAt])
+  @@index([targetType, targetId])
+  @@index([status])
+}
+
+enum JobType {
+  INTERNSHIP
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  REMOTE
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  title       String
+  company     String
+  location    String?
+  type        JobType   @default(INTERNSHIP)
+  description String
+  applyUrl    String?
+  deadline    DateTime?
+  isActive    Boolean   @default(true)
+  postedById  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  postedBy User? @relation("JobPostedBy", fields: [postedById], references: [id], onDelete: SetNull)
+
+  @@index([isActive, createdAt])
+  @@index([postedById])
+}
+
+enum FeedbackType {
+  BUG_REPORT
+  SUGGESTION
+  OTHER
+}
+
+enum FeedbackStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model Feedback {
+  id          String         @id @default(cuid())
+  userId      String?
+  type        FeedbackType   @default(BUG_REPORT)
+  title       String
+  description String
+  status      FeedbackStatus @default(OPEN)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  user User? @relation("FeedbackFiledBy", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([type, createdAt])
+  @@index([userId])
+}
+
+model PrizePayout {
+  id          String   @id @default(cuid())
+  userId      String
+  weekStart   DateTime
+  weekEnd     DateTime
+  amountTaka  Decimal  @default(0) @db.Decimal(10, 2)
+  rankAchieved Int
+  tier        String
+  paymentRef  String?
+  paidAt      DateTime?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  user      User  @relation("PrizePayoutUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("PrizePayoutCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, weekStart])
+  @@index([weekStart])
+  @@index([userId])
+}
