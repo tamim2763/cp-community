@@ -1,7 +1,13 @@
 import { JobType } from "@prisma/client";
 import { z } from "zod";
 
-const trimmed = () => z.string().trim();
+const trimmed = (min = 1, max?: number) => {
+  let schema = z.string().trim().min(min);
+  if (typeof max === "number") {
+    schema = schema.max(max);
+  }
+  return schema;
+};
 
 export const deleteByIdSchema = z.object({
   id: z.string().trim().min(1, "Missing id."),

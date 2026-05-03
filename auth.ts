@@ -52,6 +52,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           email: user.email,
           image: user.avatarUrl,
           role: user.role,
+          hasSeenOnboardingTutorial: user.hasSeenOnboardingTutorial,
         };
       },
     }),
