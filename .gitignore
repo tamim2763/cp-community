@@ -57,6 +57,7 @@ node_modules/.prisma/
 # Development
 .turbo
 .cache
+.codex
 test-*.js
 fix-*.js
 *.tmp
