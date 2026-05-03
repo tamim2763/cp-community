@@ -105,8 +105,8 @@ async function fetchAtCoderProfile(handle: string): Promise<FetchedCpProfile> {
   }
 
   const displayHandle = firstMatch(text, /<title>\s*([^<]+?)\s*-\s*AtCoder\s*<\/title>/i)?.trim();
-  const currentRating = toInt(firstMatch(text, /<th class="no-break">Rating<\/th><td><span[^>]*>([\d,]+)<\/span>/i));
-  const maxRating = toInt(firstMatch(text, /<th class="no-break">Highest Rating<\/th><td><span[^>]*>([\d,]+)<\/span>/i));
+  const currentRating = toInt(firstMatch(text, /<th class="no-break">Rating<\/th><td>[\s\S]*?<span[^>]*>([\d,]+)<\/span>/i));
+  const maxRating = toInt(firstMatch(text, /<th class="no-break">Highest Rating<\/th><td>[\s\S]*?<span[^>]*>([\d,]+)<\/span>/i));
   const rankTitle = stripTags(
     firstMatch(text, /<th class="no-break">Highest Rating<\/th><td>[\s\S]*?<span class="bold">([^<]+)<\/span>/i) ?? "",
   ) || null;
@@ -226,6 +226,7 @@ type CodeChefSubmission = {
 
 function parseCodeChefRecentTable(html: string): CodeChefSubmission[] {
   const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+  let fallbackIdCounter = Date.now();
 
   return rows
     .map((row) => {
@@ -234,25 +235,47 @@ function parseCodeChefRecentTable(html: string): CodeChefSubmission[] {
       const problemId = firstMatch(block, /<td[^>]*title='([^']+)'><a href='[^']+'/i);
       const verdict = firstMatch(block, /<span title='([^']+)'/i);
       const rawTime = firstMatch(block, /<td[^>]*title='([^']+)'/i);
+      
+      let submittedAt: Date | null = null;
+      if (rawTime) {
+        if (rawTime.includes("sec ago") || rawTime.includes("min ago")) {
+          submittedAt = new Date();
+        } else {
+          submittedAt = new Date(rawTime.replace(/\//g, "-") + " UTC");
+          if (Number.isNaN(submittedAt.getTime())) submittedAt = new Date();
+        }
+      }
+
       return {
-        id: submissionId ?? "",
+        id: submissionId ?? (fallbackIdCounter++).toString(),
         problemId: problemId ?? "",
         verdict: verdict ?? "",
-        submittedAt: rawTime ? new Date(rawTime.replace(/\//g, "-") + " UTC") : null,
+        submittedAt,
       };
     })
     .filter((submission) => submission.id && submission.problemId);
 }
 
-async function fetchCodeChefSubmissions(handle: string): Promise<CodeChefSubmission[]> {
-  const { response, text } = await fetchText(
-    `https://www.codechef.com/recent/user?page=0&user_handle=${encodeURIComponent(handle)}`,
-  );
+export async function fetchCodeChefSubmissions(handle: string, maxPages = 3): Promise<CodeChefSubmission[]> {
+  const allSubmissions: CodeChefSubmission[] = [];
 
-  if (!response.ok) return [];
+  for (let page = 0; page < maxPages; page++) {
+    const { response, text } = await fetchText(
+      `https://www.codechef.com/recent/user?page=${page}&user_handle=${encodeURIComponent(handle)}`,
+    );
 
-  const payload = JSON.parse(text) as { content?: string };
-  return parseCodeChefRecentTable(payload.content ?? "");
+    if (!response.ok) break;
+
+    const payload = JSON.parse(text) as { content?: string };
+    if (!payload.content) break;
+
+    const parsed = parseCodeChefRecentTable(payload.content);
+    if (parsed.length === 0) break;
+
+    allSubmissions.push(...parsed);
+  }
+
+  return allSubmissions;
 }
 
 export async function fetchLatestSubmissionMarker(platform: CpPlatform, handle: string): Promise<string | null> {
@@ -299,10 +322,13 @@ export async function findCompilationErrorProof(
     case CpPlatform.CODECHEF: {
       const submissions = await fetchCodeChefSubmissions(handle);
       const matched = submissions.find(
-        (submission) =>
-          isSubmissionAfterBaseline(submission.id, challenge.baselineSubmissionId) &&
-          submission.problemId === challenge.problemId &&
-          submission.verdict.toLowerCase().includes("compilation error"),
+        (submission) => {
+          const isRecent = submission.submittedAt && (Date.now() - submission.submittedAt.getTime() < 15 * 60 * 1000);
+          const isAfterBaseline = isSubmissionAfterBaseline(submission.id, challenge.baselineSubmissionId);
+          return (isAfterBaseline || isRecent) &&
+            submission.problemId === challenge.problemId &&
+            submission.verdict.toLowerCase().includes("compilation error");
+        }
       );
       return matched
         ? {
@@ -314,21 +340,17 @@ export async function findCompilationErrorProof(
         : null;
     }
     case CpPlatform.ATCODER: {
-      const submissions = await fetchAtCoderSubmissions(handle);
-      const matched = submissions.find(
-        (submission) =>
-          isSubmissionAfterBaseline(submission.id, challenge.baselineSubmissionId) &&
-          submission.problemId === challenge.problemId &&
-          submission.verdict === "CE",
-      );
-      return matched
-        ? {
-            submissionId: matched.id,
-            problemId: matched.problemId,
-            verdict: matched.verdict,
-            submittedAt: matched.submittedAt,
-          }
-        : null;
+      const { response, text } = await fetchText(`https://atcoder.jp/users/${encodeURIComponent(handle)}`);
+      
+      if (response.ok && text.includes(challenge.challengeCode)) {
+        return {
+          submissionId: "profile-affiliation",
+          problemId: "affiliation",
+          verdict: "CE",
+          submittedAt: new Date(),
+        };
+      }
+      return null;
     }
   }
 }

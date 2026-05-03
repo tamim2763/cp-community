@@ -7,16 +7,21 @@ declare module "next-auth" {
     user: DefaultSession["user"] & {
       id: string;
       role: UserRole;
+      isActive: boolean;
+      hasSeenOnboardingTutorial: boolean;
     };
   }
 
   interface User {
     role: UserRole;
+    hasSeenOnboardingTutorial: boolean;
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
     role?: UserRole;
+    isActive?: boolean;
+    hasSeenOnboardingTutorial?: boolean;
   }
 }

@@ -3,9 +3,9 @@ generator client {
 }
 
 datasource db {
-provider = "postgresql"
-url = env("DATABASE_URL")
-directUrl = env("DIRECT_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
@@ -68,10 +68,10 @@ enum ContestSource {
 }
 
 model User {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   name          String
-  username      String?  @unique
-  email         String   @unique
+  username      String?   @unique
+  email         String    @unique
   emailVerified DateTime?
   passwordHash  String?
   avatarUrl     String?
@@ -79,11 +79,12 @@ model User {
   universityId  String?
   batch         String?
   department    String?
-  role          UserRole @default(USER)
-  prizeMoneyWon Decimal  @default(0) @db.Decimal(12, 2)
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  role                       UserRole  @default(USER)
+  prizeMoneyWon              Decimal   @default(0) @db.Decimal(12, 2)
+  isActive                   Boolean   @default(true)
+  hasSeenOnboardingTutorial  Boolean   @default(false)
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
   accounts                    Account[]
   sessions                    Session[]
@@ -92,22 +93,23 @@ model User {
   problemSolves               ProblemSolve[]
   weeklyScores                WeeklyScore[]
   dailyStats                  DailyUserStat[]
-  achievements                Achievement[]           @relation("AchievementAuthor")
-  approvedAchievements        Achievement[]           @relation("AchievementApprovedBy")
-  createdMotivationalProfiles MotivationalProfile[]   @relation("MotivationalProfileCreatedBy")
-  updatedMotivationalProfiles MotivationalProfile[]   @relation("MotivationalProfileUpdatedBy")
-  createdResources            Resource[]              @relation("ResourceCreatedBy")
-  updatedResources            Resource[]              @relation("ResourceUpdatedBy")
-  createdChatRooms            ChatRoom[]              @relation("ChatRoomCreatedBy")
+  achievements                Achievement[]         @relation("AchievementAuthor")
+  approvedAchievements        Achievement[]         @relation("AchievementApprovedBy")
+  createdMotivationalProfiles MotivationalProfile[] @relation("MotivationalProfileCreatedBy")
+  updatedMotivationalProfiles MotivationalProfile[] @relation("MotivationalProfileUpdatedBy")
+  createdResources            Resource[]            @relation("ResourceCreatedBy")
+  updatedResources            Resource[]            @relation("ResourceUpdatedBy")
+  createdChatRooms            ChatRoom[]            @relation("ChatRoomCreatedBy")
   chatRoomMemberships         ChatRoomMember[]
-  chatMessages                ChatMessage[]           @relation("ChatMessageAuthor")
-  adminLogs                   AdminLog[]              @relation("AdminLogActor")
-  reportsFiled                Report[]                @relation("ReportFiledBy")
-  reportsReviewed             Report[]                @relation("ReportReviewedBy")
-  jobsPosted                  Job[]                   @relation("JobPostedBy")
-  feedbacksFiled              Feedback[]              @relation("FeedbackFiledBy")
-  prizePayouts                PrizePayout[]           @relation("PrizePayoutUser")
-  prizePayoutsCreated         PrizePayout[]           @relation("PrizePayoutCreatedBy")
+  chatMessages                ChatMessage[]         @relation("ChatMessageAuthor")
+  adminLogs                   AdminLog[]            @relation("AdminLogActor")
+  reportsFiled                Report[]              @relation("ReportFiledBy")
+  reportsReviewed             Report[]              @relation("ReportReviewedBy")
+  jobsPosted                  Job[]                 @relation("JobPostedBy")
+  feedbacksFiled              Feedback[]            @relation("FeedbackFiledBy")
+  prizePayouts                PrizePayout[]         @relation("PrizePayoutUser")
+  prizePayoutsCreated         PrizePayout[]         @relation("PrizePayoutCreatedBy")
+  announcements               Announcement[]        @relation("AnnouncementCreatedBy")
 }
 
 model Account {
@@ -149,6 +151,14 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+model PasswordResetToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
 model CpProfile {
   id                      String        @id @default(cuid())
   userId                  String
@@ -173,8 +183,8 @@ model CpProfile {
   createdAt               DateTime      @default(now())
   updatedAt               DateTime      @updatedAt
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  submissions  Submission[]
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  submissions   Submission[]
   problemSolves ProblemSolve[]
 
   @@unique([userId, platform])
@@ -439,10 +449,10 @@ model ChatMessage {
   deletedAt        DateTime?
   createdAt        DateTime        @default(now())
 
-  room           ChatRoom             @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  user           User                 @relation("ChatMessageAuthor", fields: [userId], references: [id], onDelete: Cascade)
-  replyToMessage ChatMessage?         @relation("MessageReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
-  replies        ChatMessage[]        @relation("MessageReplies")
+  room           ChatRoom            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user           User                @relation("ChatMessageAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  replyToMessage ChatMessage?        @relation("MessageReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies        ChatMessage[]       @relation("MessageReplies")
   attachments    MessageAttachment[]
 
   @@index([roomId, createdAt])
@@ -482,15 +492,15 @@ model AdminLog {
 }
 
 model Report {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   reportedById String
   targetType   String
   targetId     String
   reason       String
-  status       String   @default("OPEN")
+  status       String    @default("OPEN")
   reviewedById String?
   reviewedAt   DateTime?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
 
   reportedBy User  @relation("ReportFiledBy", fields: [reportedById], references: [id], onDelete: Cascade)
   reviewedBy User? @relation("ReportReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
@@ -559,17 +569,17 @@ model Feedback {
 }
 
 model PrizePayout {
-  id          String   @id @default(cuid())
-  userId      String
-  weekStart   DateTime
-  weekEnd     DateTime
-  amountTaka  Decimal  @default(0) @db.Decimal(10, 2)
+  id           String    @id @default(cuid())
+  userId       String
+  weekStart    DateTime
+  weekEnd      DateTime
+  amountTaka   Decimal   @default(0) @db.Decimal(10, 2)
   rankAchieved Int
-  tier        String
-  paymentRef  String?
-  paidAt      DateTime?
-  createdById String?
-  createdAt   DateTime @default(now())
+  tier         String
+  paymentRef   String?
+  paidAt       DateTime?
+  createdById  String?
+  createdAt    DateTime  @default(now())
 
   user      User  @relation("PrizePayoutUser", fields: [userId], references: [id], onDelete: Cascade)
   createdBy User? @relation("PrizePayoutCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -577,4 +587,26 @@ model PrizePayout {
   @@unique([userId, weekStart])
   @@index([weekStart])
   @@index([userId])
+}
+
+model Announcement {
+  id          String   @id @default(cuid())
+  content     String
+  startsAt    DateTime
+  endsAt      DateTime
+  isActive    Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User? @relation("AnnouncementCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([isActive, startsAt, endsAt])
+}
+
+model AppConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
 }

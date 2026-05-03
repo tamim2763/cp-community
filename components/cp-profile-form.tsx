@@ -2,6 +2,7 @@
 
 import { CpPlatform, ProfileStatus } from "@prisma/client";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import {
   createVerificationChallengeAction,
@@ -35,6 +36,7 @@ type Props = {
   placeholder: string;
   description: string;
   profile?: CpProfileSummary;
+  fallbackAvatarUrl?: string | null;
 };
 
 const initialState: CpProfileFormState = { error: null, success: null };
@@ -52,10 +54,12 @@ function getStatusLabel(status: ProfileStatus, isVerified: boolean) {
   }
 }
 
-export function CpProfileForm({ platform, title, placeholder, description, profile }: Props) {
+export function CpProfileForm({ platform, title, placeholder, description, profile, fallbackAvatarUrl }: Props) {
   const [saveState, saveFormAction] = useActionState(saveCpProfileAction, initialState);
   const [challengeState, challengeFormAction] = useActionState(createVerificationChallengeAction, initialState);
   const [verifyState, verifyFormAction] = useActionState(verifyOwnershipAction, initialState);
+  // manual solved-problem entry is now handled in the Dashboard Solve Entry panel
+  const [unlinkState, unlinkFormAction] = useActionState(unlinkCpProfileAction as any, { error: null, success: null } as any);
   const challenge = profile?.verificationField ? parseChallenge(profile.verificationField) : null;
   const [isEditing, setIsEditing] = useState(!profile);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -71,10 +75,20 @@ export function CpProfileForm({ platform, title, placeholder, description, profi
 
   useEffect(() => {
     if (isEditing) {
+      if (!profile) return;
       inputRef.current?.focus();
       inputRef.current?.select();
     }
-  }, [isEditing]);
+  }, [isEditing, profile]);
+
+  const router = useRouter();
+
+  useEffect(() => {
+    if (unlinkState.success) {
+      // refresh server data so dashboard reflects the unlinked profile
+      router.refresh();
+    }
+  }, [unlinkState.success, router]);
 
   const feedback = useMemo(() => {
     if (verifyState.error || verifyState.success) return verifyState;
@@ -91,15 +105,17 @@ export function CpProfileForm({ platform, title, placeholder, description, profi
           <h3>{title}</h3>
           <p>{description}</p>
         </div>
-        <span className="badge">{profile ? "Linked" : "Not linked"}</span>
+        <span className={profile ? "badge" : "badge badge-rect"}>
+          {profile ? "Linked" : "Not linked"}
+        </span>
       </div>
 
       {profile ? (
         <div className="linked-profile-meta">
-          {profile.avatarUrl ? (
+          { (profile.avatarUrl || fallbackAvatarUrl) ? (
             <div className="linked-profile-identity">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={profile.avatarUrl} alt={`${profile.displayHandle ?? profile.handle} avatar`} className="profile-avatar" />
+              <img src={profile.avatarUrl ?? fallbackAvatarUrl ?? ""} alt={`${profile.displayHandle ?? profile.handle} avatar`} className="profile-avatar" />
               <div>
                 <p>
                   Current handle: <strong>{profile.displayHandle ?? profile.handle}</strong>
@@ -121,10 +137,27 @@ export function CpProfileForm({ platform, title, placeholder, description, profi
           {profile.maxRating !== null ? <p>Max rating: {profile.maxRating}</p> : null}
           {!profile.isVerified && challenge ? (
             <div className="verification-box">
-              <p>Submit a compilation error to the following problem to verify yourself.</p>
-              <a className="auth-button problem-link-button" href={challenge.problemUrl} target="_blank" rel="noreferrer">
-                Problem link
-              </a>
+              {platform === "ATCODER" ? (
+                <>
+                  <p style={{ marginBottom: 12 }}>Copy the token below and temporarily paste it anywhere into your AtCoder <strong>Affiliation</strong> field (Settings &gt; Profile &gt; Affiliation). Then click Verify handle.</p>
+                  <div style={{ background: "var(--bg-3)", padding: "10px", borderRadius: "var(--radius-sm)", fontFamily: "monospace", textAlign: "center", fontWeight: 700, fontSize: "1.1rem", border: "1px dashed var(--border-2)" }}>
+                    {challenge.challengeCode}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p>Submit a compilation error to the following problem to verify yourself.</p>
+                  {/* force Codeforces to open desktop view when possible */}
+                  <a
+                    className="auth-button problem-link-button"
+                    href={platform === "CODEFORCES" ? `${challenge.problemUrl}?mobile=false` : challenge.problemUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    Problem link
+                  </a>
+                </>
+              )}
             </div>
           ) : null}
           {profile.syncError ? <p className="form-error">{profile.syncError}</p> : null}
@@ -175,14 +208,14 @@ export function CpProfileForm({ platform, title, placeholder, description, profi
           {feedback.success ? <p className="form-success">{feedback.success}</p> : null}
 
           <div className="platform-actions">
-            {profile ? (
+            {profile && profile.isVerified ? (
               <button className="auth-button" type="button" onClick={() => setIsEditing(true)}>
                 Update handle
               </button>
             ) : null}
 
-            {profile ? (
-              <form action={unlinkCpProfileAction}>
+            {profile && profile.isVerified ? (
+              <form action={unlinkFormAction}>
                 <input type="hidden" name="platform" value={platform} />
                 <button className="auth-button secondary-button" type="submit">
                   Unlink
@@ -202,11 +235,11 @@ export function CpProfileForm({ platform, title, placeholder, description, profi
                 Verify handle
               </button>
             </form>
-          ) : (
-            <p className="form-success">Verified.</p>
-          )}
+          ) : null}
         </div>
       ) : null}
+
+      {/* Manual solved-problem entry moved to Dashboard Solve Entry panel */}
     </article>
   );
 }

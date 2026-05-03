@@ -32,3 +32,12 @@ export const cpProfileSchema = z
 export const unlinkCpProfileSchema = z.object({
   platform: z.nativeEnum(CpPlatform),
 });
+
+export const manualProblemSolveSchema = z.object({
+  platform: z.nativeEnum(CpPlatform),
+  problemLink: z.string().url("Problem link must be a valid URL."),
+  problemRating: z
+    .preprocess((val) => Number(val), z.number().int().min(0, "Rating cannot be negative."))
+    .optional()
+    .nullable(),
+});

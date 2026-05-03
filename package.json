@@ -11,7 +11,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts",
+    "contests:backfill": "tsx scripts/backfill-contests-visibility.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
@@ -23,6 +24,7 @@
     "next": "^15.2.2",
     "next-auth": "^5.0.0-beta.25",
     "next-themes": "^0.4.6",
+    "nodemailer": "^7.0.13",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^3.24.2"

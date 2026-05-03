@@ -1,42 +1,75 @@
 import { CpPlatform } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import {
+  DEFAULT_WEEKLY_SCORING_CONFIG,
+  getWeeklyScoringConfig,
+  type WeeklyScoringConfig,
+} from "@/lib/scoring/config";
+
+const DHAKA_DATE = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Dhaka",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function getDhakaDateKey(date: Date): string {
+  return DHAKA_DATE.format(date);
+}
+
+function getDhakaDayStartUtc(date: Date): Date {
+  const [year, month, day] = getDhakaDateKey(date).split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+}
+
+function addDhakaDays(dayStartUtc: Date, days: number): Date {
+  const next = new Date(dayStartUtc);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
 
 /**
- * Weighted score algorithm (as per PRD):
+ * Cross-platform CP leaderboard scoring.
  *
- * If problem rating (P) exists and user rating (U) is known:
- *   difficultyScore = max(1, P / 400)
- *   challengeMultiplier:
- *     D = P - U
- *     D >= 300  → 1.5
- *     D >= 100  → 1.3
- *     D >= -100 → 1.0
- *     D >= -300 → 0.75
- *     else      → 0.5
- *   score = difficultyScore × challengeMultiplier
+ * There is no single universal public standard for CF + CC + AtCoder
+ * practice leaderboards, so we use a simple exponential gap multiplier:
  *
- * If rating unavailable: flat score of 1.0 per unique accepted problem
+ * - unrated problem → 1 point
+ * - rated problem → base score = 1
+ * - then compare problem rating vs current platform rating
+ * - every 100 rating gap changes the multiplier by 10%, exponentially
+ *   harder: 1.1^steps, easier: 1 / 1.1^steps
  */
 
-function computeProblemScore(problemRating: number | null, userRating: number | null): number {
+function getGapSteps(problemRating: number, userRating: number, gapStepSize: number) {
+  const gap = problemRating - userRating;
+
+  if (gap === 0) return 0;
+
+  return Math.max(1, Math.ceil(Math.abs(gap) / gapStepSize));
+}
+
+export function computeProblemScore(
+  problemRating: number | null,
+  userRating: number | null,
+  config: WeeklyScoringConfig = DEFAULT_WEEKLY_SCORING_CONFIG,
+): number {
   if (!problemRating) return 1.0;
+  if (!userRating) return 1.0;
 
-  const difficultyScore = Math.max(1, problemRating / 400);
+  const gap = problemRating - userRating;
+  const steps = getGapSteps(problemRating, userRating, config.gapStepSize);
+  const multiplier =
+    gap > 0
+      ? Math.pow(config.multiplierBase, steps)
+      : 1 / Math.pow(config.multiplierBase, steps);
 
-  if (!userRating) return difficultyScore;
-
-  const D = problemRating - userRating;
-  let multiplier: number;
-  if (D >= 300) multiplier = 1.5;
-  else if (D >= 100) multiplier = 1.3;
-  else if (D >= -100) multiplier = 1.0;
-  else if (D >= -300) multiplier = 0.75;
-  else multiplier = 0.5;
-
-  return difficultyScore * multiplier;
+  return multiplier;
 }
 
 export async function computeWeeklyScoresForAllUsers(weekStart: Date, weekEnd: Date) {
+  const scoringConfig = await getWeeklyScoringConfig();
+
   // Fetch all users with at least one cp profile
   const users = await prisma.user.findMany({
     where: { isActive: true },
@@ -46,19 +79,44 @@ export async function computeWeeklyScoresForAllUsers(weekStart: Date, weekEnd: D
   });
 
   for (const user of users) {
-    await computeWeeklyScoreForUser(user.id, user.cpProfiles, weekStart, weekEnd);
+    await computeWeeklyScoreForUser(user.id, user.cpProfiles, weekStart, weekEnd, scoringConfig);
   }
 
   // After computing all scores, snapshot ranks
   await snapshotRanks(weekStart);
 }
 
-async function computeWeeklyScoreForUser(
+export async function recomputeCurrentWeekForUser(userId: string) {
+  const { weekStart, weekEnd } = getWeekBounds();
+  const scoringConfig = await getWeeklyScoringConfig();
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      cpProfiles: {
+        select: {
+          platform: true,
+          currentRating: true,
+        },
+      },
+    },
+  });
+
+  if (!user) return;
+
+  await computeWeeklyScoreForUser(user.id, user.cpProfiles, weekStart, weekEnd, scoringConfig);
+  await snapshotRanks(weekStart);
+}
+
+export async function computeWeeklyScoreForUser(
   userId: string,
   cpProfiles: { platform: CpPlatform; currentRating: number | null }[],
   weekStart: Date,
   weekEnd: Date,
+  scoringConfig?: WeeklyScoringConfig,
 ) {
+  const effectiveScoringConfig = scoringConfig ?? (await getWeeklyScoringConfig());
   const ratingByPlatform = new Map(cpProfiles.map((p) => [p.platform, p.currentRating]));
 
   // Fetch all unique solves during this week
@@ -83,7 +141,7 @@ async function computeWeeklyScoreForUser(
 
   for (const solve of solves) {
     const userRating = ratingByPlatform.get(solve.platform) ?? null;
-    const score = computeProblemScore(solve.problemRating, userRating);
+    const score = computeProblemScore(solve.problemRating, userRating, effectiveScoringConfig);
 
     totalWeighted += score;
 
@@ -103,8 +161,9 @@ async function computeWeeklyScoreForUser(
     }
   }
 
-  // Compute current streak
-  const streak = await computeCurrentStreak(userId, weekEnd);
+  // For the active week, compute streak up to now (not week end), otherwise use the historical week end.
+  const streakAsOf = weekEnd.getTime() > Date.now() ? new Date() : weekEnd;
+  const streak = await computeCurrentStreak(userId, streakAsOf);
 
   await prisma.weeklyScore.upsert({
     where: {
@@ -141,62 +200,73 @@ async function computeWeeklyScoreForUser(
 }
 
 async function computeCurrentStreak(userId: string, asOf: Date): Promise<number> {
-  // Walk backwards from asOf, counting consecutive days with at least one solve
   const stats = await prisma.dailyUserStat.findMany({
-    where: { userId, date: { lte: asOf } },
+    where: { userId, date: { lte: getDhakaDayStartUtc(asOf) } },
     orderBy: { date: "desc" },
     take: 365,
     select: { date: true, solvedCount: true },
   });
 
+  const solvedDays = new Set(
+    stats.filter((stat) => stat.solvedCount > 0).map((stat) => getDhakaDateKey(new Date(stat.date))),
+  );
+
+  const todayStart = getDhakaDayStartUtc(asOf);
+  const todayKey = getDhakaDateKey(todayStart);
   let streak = 0;
-  let currentDate = new Date(asOf);
-  currentDate.setHours(0, 0, 0, 0);
+  let cursor = solvedDays.has(todayKey) ? todayStart : addDhakaDays(todayStart, -1);
 
-  for (const stat of stats) {
-    const statDate = new Date(stat.date);
-    statDate.setHours(0, 0, 0, 0);
-    const diffDays = Math.round((currentDate.getTime() - statDate.getTime()) / 86400000);
-
-    if (diffDays > 1) break; // Gap in solving
-    if (stat.solvedCount > 0) {
-      streak++;
-      currentDate = statDate;
-    } else {
-      break;
-    }
+  while (solvedDays.has(getDhakaDateKey(cursor))) {
+    streak++;
+    cursor = addDhakaDays(cursor, -1);
   }
 
   return streak;
 }
 
-async function snapshotRanks(weekStart: Date) {
+export async function snapshotRanks(weekStart?: Date) {
+  const effectiveWeekStart = weekStart ?? getWeekBounds().weekStart;
+
   const scores = await prisma.weeklyScore.findMany({
-    where: { weekStart },
-    orderBy: { weightedScore: "desc" },
-    select: { id: true },
+    where: { weekStart: effectiveWeekStart },
+    orderBy: [
+      { weightedScore: "desc" },
+      { rawSolvedCount: "desc" },
+      { streakAtWeekEnd: "desc" },
+      { userId: "asc" }
+    ],
+    select: { id: true, weightedScore: true, rawSolvedCount: true, streakAtWeekEnd: true },
   });
 
+  let currentRank = 1;
+  let displayRank = 1;
+
   for (let i = 0; i < scores.length; i++) {
+    if (
+      i > 0 &&
+      scores[i].weightedScore.equals(scores[i - 1].weightedScore) &&
+      scores[i].rawSolvedCount === scores[i - 1].rawSolvedCount &&
+      scores[i].streakAtWeekEnd === scores[i - 1].streakAtWeekEnd
+    ) {
+      // Tie -> keep displayRank
+    } else {
+      displayRank = currentRank;
+    }
+
     await prisma.weeklyScore.update({
       where: { id: scores[i].id },
-      data: { rankSnapshot: i + 1 },
+      data: { rankSnapshot: displayRank },
     });
+    currentRank++;
   }
 }
 
 export function getWeekBounds(date: Date = new Date()): { weekStart: Date; weekEnd: Date } {
-  // Week starts on Saturday (BD convention for weekly context) or Sunday. Using Monday.
-  const d = new Date(date);
-  const day = d.getDay(); // 0=Sun, 1=Mon ... 6=Sat
-  const diffToMonday = (day === 0 ? -6 : 1 - day);
-  const weekStart = new Date(d);
-  weekStart.setDate(d.getDate() + diffToMonday);
-  weekStart.setHours(0, 0, 0, 0);
-
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  weekEnd.setHours(23, 59, 59, 999);
+  const dhakaDayStart = getDhakaDayStartUtc(date);
+  const day = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Dhaka" })).getDay(); // 0=Sun
+  const weekStart = addDhakaDays(dhakaDayStart, -day);
+  const weekEnd = addDhakaDays(weekStart, 6);
+  weekEnd.setUTCHours(23, 59, 59, 999);
 
   return { weekStart, weekEnd };
 }

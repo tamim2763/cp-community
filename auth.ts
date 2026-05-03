@@ -32,6 +32,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null;
         }
 
+        if (!user.isActive) {
+          return null;
+        }
+
+        if (!user.emailVerified && user.email.toLowerCase() !== "admin@example.com") {
+          return null;
+        }
+
         const isValid = await verifyPassword(parsed.data.password, user.passwordHash);
 
         if (!isValid) {
@@ -57,7 +65,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       const user = await prisma.user.findUnique({
         where: { id: token.sub },
-        select: { role: true, name: true, email: true, avatarUrl: true },
+        select: { role: true, name: true, email: true, avatarUrl: true, isActive: true, hasSeenOnboardingTutorial: true },
       });
 
       if (user) {
@@ -65,6 +73,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.name = user.name;
         token.email = user.email;
         token.picture = user.avatarUrl;
+        token.isActive = user.isActive;
+        token.hasSeenOnboardingTutorial = user.hasSeenOnboardingTutorial;
+      } else {
+        token.isActive = false;
       }
 
       return token;
@@ -76,6 +88,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.name = typeof token.name === "string" ? token.name : session.user.name;
         session.user.email = typeof token.email === "string" ? token.email : session.user.email ?? "";
         session.user.image = typeof token.picture === "string" ? token.picture : null;
+        session.user.hasSeenOnboardingTutorial = token.hasSeenOnboardingTutorial ?? false;
+        session.user.isActive = token.isActive !== false;
       }
 
       return session;

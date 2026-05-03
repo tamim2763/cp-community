@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Navbar } from "@/components/ui/navbar";
 import { Sidebar } from "@/components/ui/sidebar";
+import { OnboardingTutorialModal } from "@/components/onboarding-tutorial-modal";
 import { auth } from "@/auth";
 
 export const metadata: Metadata = {
@@ -17,14 +18,16 @@ export default async function RootLayout({
 }>) {
   const session = await auth();
   const isAuthed = !!session?.user;
+  const shouldShowOnboarding = isAuthed && session?.user && !session.user.hasSeenOnboardingTutorial;
 
   return (
     <html lang="en">
-      <body>
+      <body suppressHydrationWarning>
         <div className="app-shell">
           <Navbar user={session?.user ?? null} />
-          {isAuthed && <Sidebar />}
+          {isAuthed && <Sidebar user={session?.user ?? null} />}
           <main className={`main-content ${isAuthed ? "with-sidebar" : ""}`}>
+            {shouldShowOnboarding && <OnboardingTutorialModal userId={session.user!.id} />}
             {children}
           </main>
         </div>

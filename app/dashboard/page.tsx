@@ -6,7 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { CpProfileForm } from "@/components/cp-profile-form";
 import { CpPlatform } from "@prisma/client";
 import { getWeekBounds } from "@/lib/scoring/weekly-score";
-import { getTierForRank, TIER_CSS_CLASS, TIER_EMOJI, TIER_LABELS } from "@/lib/scoring/tier";
+import { TIER_CSS_CLASS, TIER_EMOJI, TIER_LABELS, getTierForRank } from "@/lib/scoring/tier";
+import { SyncSubmissionsButton } from "@/components/sync-submissions-button";
+import { SolveEntry } from "@/components/solve-entry";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -22,16 +24,16 @@ const platformCards = [
   {
     platform: CpPlatform.CODECHEF,
     title: "CodeChef",
-    placeholder: "startcoder",
-    description: "Connect your CodeChef handle.",
+    placeholder: "tourist",
+    description: "Connect your CodeChef handle, then add solved problems manually.",
     color: "var(--cc)",
     bg: "rgba(129,201,149,0.08)",
   },
   {
     platform: CpPlatform.ATCODER,
     title: "AtCoder",
-    placeholder: "chokudai",
-    description: "Add your AtCoder handle for contest and solve tracking.",
+    placeholder: "tourist",
+    description: "Add your AtCoder handle, then add solved problems manually.",
     color: "var(--atc)",
     bg: "rgba(95,179,240,0.08)",
   },
@@ -39,6 +41,32 @@ const platformCards = [
 
 function formatScore(val: unknown) {
   return Number(val ?? 0).toFixed(2);
+}
+
+const DHAKA_DATE = new Intl.DateTimeFormat("en", {
+  timeZone: "Asia/Dhaka",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function getDhakaDateKey(date: Date) {
+  const parts = DHAKA_DATE.formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value ?? "0000";
+  const month = parts.find((part) => part.type === "month")?.value ?? "01";
+  const day = parts.find((part) => part.type === "day")?.value ?? "01";
+  return `${year}-${month}-${day}`;
+}
+
+function getDhakaDayStartUtc(date: Date) {
+  const [year, month, day] = getDhakaDateKey(date).split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+}
+
+function addDhakaDays(dayStartUtc: Date, days: number) {
+  const next = new Date(dayStartUtc);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
 }
 
 // Heatmap: last 52 weeks of daily solve data
@@ -54,7 +82,7 @@ function buildHeatmapData(dailyStats: { date: Date; solvedCount: number }[]) {
 
   const statMap = new Map<string, number>();
   for (const s of dailyStats) {
-    const key = new Date(s.date).toISOString().split("T")[0];
+    const key = getDhakaDateKey(new Date(s.date));
     statMap.set(key, s.solvedCount);
   }
 
@@ -63,7 +91,7 @@ function buildHeatmapData(dailyStats: { date: Date; solvedCount: number }[]) {
   const d = new Date(start);
 
   while (d <= today) {
-    const key = d.toISOString().split("T")[0];
+    const key = getDhakaDateKey(d);
     week.push({ date: new Date(d), count: statMap.get(key) ?? 0 });
     if (week.length === 7) {
       weeks.push(week);
@@ -84,11 +112,32 @@ function getHeatmapLevel(count: number) {
   return 4;
 }
 
+function computeRollingStreak(dailyStats: { date: Date; solvedCount: number }[]) {
+  const solvedDays = new Set(
+    dailyStats
+      .filter((stat) => stat.solvedCount > 0)
+      .map((stat) => getDhakaDateKey(new Date(stat.date))),
+  );
+
+  const todayStart = getDhakaDayStartUtc(new Date());
+  const todayKey = getDhakaDateKey(todayStart);
+  let streak = 0;
+  let cursor = solvedDays.has(todayKey) ? todayStart : addDhakaDays(todayStart, -1);
+
+  while (solvedDays.has(getDhakaDateKey(cursor))) {
+    streak++;
+    cursor = addDhakaDays(cursor, -1);
+  }
+
+  return streak;
+}
+
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
   const { weekStart, weekEnd } = getWeekBounds();
+  const now = new Date();
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -107,9 +156,19 @@ export default async function DashboardPage() {
 
   if (!user) redirect("/login");
 
+  const announcements = await prisma.announcement.findMany({
+    where: {
+      isActive: true,
+      startsAt: { lte: now },
+      endsAt: { gte: now },
+    },
+    orderBy: { startsAt: "desc" },
+    take: 3,
+  });
+
   const currentWeekScore = user.weeklyScores.find(
     (w) => w.weekStart.toISOString() === weekStart.toISOString(),
-  ) ?? user.weeklyScores[0] ?? null;
+  ) ?? null;
 
   const profileByPlatform = new Map(user.cpProfiles.map((p) => [p.platform, p]));
 
@@ -120,19 +179,11 @@ export default async function DashboardPage() {
   const atcSolves = await prisma.problemSolve.count({ where: { userId: user.id, platform: CpPlatform.ATCODER } });
 
   // Leaderboard rank this week
-  const thisWeekRank = currentWeekScore
-    ? await prisma.weeklyScore.count({
-        where: {
-          weekStart,
-          weightedScore: { gt: currentWeekScore.weightedScore },
-        },
-      }) + 1
-    : null;
+  const thisWeekRank = currentWeekScore?.rankSnapshot ?? null;
 
   const tier = thisWeekRank ? getTierForRank(thisWeekRank) : null;
   const heatmapWeeks = buildHeatmapData(user.dailyStats.map((s) => ({ date: new Date(s.date), solvedCount: s.solvedCount })));
-
-  const prizeWon = Number(user.prizeMoneyWon ?? 0);
+  const rollingStreak = computeRollingStreak(user.dailyStats.map((s) => ({ date: new Date(s.date), solvedCount: s.solvedCount })));
 
   return (
     <div className="page-container">
@@ -143,23 +194,40 @@ export default async function DashboardPage() {
             <h1 className="page-title">Welcome, {user.name} 👋</h1>
             <p className="page-subtitle">Here&apos;s your competitive programming overview</p>
           </div>
-          {tier && (
-            <span className={`tier-badge ${TIER_CSS_CLASS[tier]}`} style={{ fontSize: "0.9rem", padding: "6px 14px" }}>
-              {TIER_EMOJI[tier]} {TIER_LABELS[tier]} this week
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            <SolveEntry />
+            <SyncSubmissionsButton />
+            {tier && (
+              <span className={`tier-badge ${TIER_CSS_CLASS[tier]}`} style={{ fontSize: "0.9rem", padding: "6px 14px" }}>
+                {TIER_EMOJI[tier]} {TIER_LABELS[tier]} this week
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
+      {announcements.length > 0 ? (
+        <div className="card section">
+          <div className="section-title">📢 Community announcements</div>
+          <div style={{ display: "grid", gap: 12 }}>
+            {announcements.map((announcement) => (
+              <div key={announcement.id} className="card" style={{ padding: 16, display: "grid", gap: 8 }}>
+                <div style={{ whiteSpace: "pre-wrap", color: "var(--text)" }}>{announcement.content}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {/* Stat row */}
-      <div className="grid-4 section">
+      <div className="grid-4 section" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
         <div className="stat-card">
           <div className="stat-label">Total Solved</div>
           <div className="stat-value mono">{totalSolves}</div>
           <div className="stat-sub">across all platforms</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">This Week</div>
+          <div className="stat-label">This Week (solve count)</div>
           <div className="stat-value mono">{currentWeekScore?.rawSolvedCount ?? 0}</div>
           <div className="stat-sub">
             {currentWeekScore ? `${formatScore(currentWeekScore.weightedScore)} pts` : "no data yet"}
@@ -168,15 +236,10 @@ export default async function DashboardPage() {
         <div className="stat-card">
           <div className="stat-label">Current Streak</div>
           <div className="stat-value">
-            {currentWeekScore?.streakAtWeekEnd ?? 0}
+            {rollingStreak}
             <span style={{ fontSize: "1.2rem", marginLeft: 4 }}>🔥</span>
           </div>
           <div className="stat-sub">days in a row</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Prize Won</div>
-          <div className="stat-value">৳{prizeWon}</div>
-          <div className="stat-sub">BKash payouts</div>
         </div>
       </div>
 
@@ -296,7 +359,7 @@ export default async function DashboardPage() {
               <div className="empty-icon">⏳</div>
               <div className="empty-title">No data yet</div>
               <div className="empty-text">
-                Link your handles below. Sync runs every 6h automatically.
+                Link your handles below. Codeforces syncs automatically, and CodeChef or AtCoder solves can be added manually.
               </div>
             </div>
           )}
@@ -308,7 +371,7 @@ export default async function DashboardPage() {
         <div className="section-heading">
           <div>
             <h2 style={{ margin: "0 0 4px" }}>CP Handles</h2>
-            <p className="section-copy">Link one handle per platform. Sync jobs run every 6 hours.</p>
+            <p className="section-copy">Link one handle per platform. Codeforces syncs automatically, CodeChef and AtCoder are entered manually.</p>
           </div>
           <span className="badge">{user.cpProfiles.length}/3 linked</span>
         </div>
@@ -321,67 +384,12 @@ export default async function DashboardPage() {
               placeholder={pc.placeholder}
               description={pc.description}
               profile={profileByPlatform.get(pc.platform)}
+              fallbackAvatarUrl={user.avatarUrl}
             />
           ))}
         </div>
       </div>
 
-      {/* Prize history */}
-      {prizeWon > 0 && (
-        <div className="card section">
-          <div className="section-title">💰 Prize history</div>
-          <PrizeHistory userId={user.id} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-async function PrizeHistory({ userId }: { userId: string }) {
-  const payouts = await prisma.prizePayout.findMany({
-    where: { userId },
-    orderBy: { weekStart: "desc" },
-    take: 10,
-  });
-
-  if (payouts.length === 0) {
-    return <p style={{ color: "var(--text-3)", fontSize: "0.875rem" }}>No prizes recorded yet.</p>;
-  }
-
-  return (
-    <div style={{ overflowX: "auto" }}>
-      <table className="table" style={{ border: "none" }}>
-        <thead>
-          <tr>
-            <th>Week</th>
-            <th>Rank</th>
-            <th>Tier</th>
-            <th style={{ textAlign: "right" }}>Prize</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {payouts.map((p) => (
-            <tr key={p.id}>
-              <td>{new Date(p.weekStart).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}</td>
-              <td>#{p.rankAchieved}</td>
-              <td>
-                <span className={`tier-badge tier-${p.tier.toLowerCase()}`}>{p.tier}</span>
-              </td>
-              <td style={{ textAlign: "right", fontWeight: 700, color: "var(--success)" }}>
-                ৳{Number(p.amountTaka).toFixed(0)}
-              </td>
-              <td>
-                {p.paidAt ? (
-                  <span className="badge badge-success" style={{ fontSize: "0.72rem" }}>Paid</span>
-                ) : (
-                  <span className="badge badge-warning" style={{ fontSize: "0.72rem" }}>Pending</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }

@@ -21,6 +21,7 @@ export async function GET(request: Request) {
     id: m.id,
     text: m.messageText ?? "",
     createdAt: m.createdAt.toISOString(),
+    isEdited: m.isEdited,
     user: { id: m.user.id, name: m.user.name, avatarUrl: m.user.avatarUrl },
   })));
 }
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
     data: {
       roomId: body.roomId,
       userId: session.user.id,
-      messageText: body.text.trim().slice(0, 1000),
+      messageText: body.text.trim().slice(0, 5000),
       messageType: "TEXT",
     },
     include: { user: { select: { id: true, name: true, avatarUrl: true } } },
@@ -48,6 +49,7 @@ export async function POST(request: Request) {
     id: message.id,
     text: message.messageText ?? "",
     createdAt: message.createdAt.toISOString(),
+    isEdited: message.isEdited,
     user: { id: message.user.id, name: message.user.name, avatarUrl: message.user.avatarUrl },
   });
 }

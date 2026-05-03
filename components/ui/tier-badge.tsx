@@ -9,6 +9,8 @@ type TierBadgeProps = {
 
 export function TierBadge({ rank, tier, showEmoji = true, size = "md" }: TierBadgeProps) {
   const t = tier ?? getTierForRank(rank);
+  if (!t) return null;
+
   const cssClass = TIER_CSS_CLASS[t];
   const emoji = TIER_EMOJI[t];
   const label = TIER_LABELS[t];

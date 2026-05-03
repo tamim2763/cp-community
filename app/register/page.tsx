@@ -14,7 +14,6 @@ export default async function RegisterPage() {
     <main>
       <section className="auth-shell">
         <div className="auth-card">
-          <span className="badge">New account</span>
           <h1>Create your account</h1>
           <p className="auth-subtitle">Start building your CP profile and weekly streak.</p>
           <RegisterForm />

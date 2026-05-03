@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 export default function FeedbackPage() {
   const router = useRouter();
-  const [type, setType] = useState<"BUG_REPORT" | "SUGGESTION" | "OTHER">("BUG_REPORT");
+  const [type, setType] = useState<"BUG_REPORT" | "SUGGESTION">("BUG_REPORT");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
@@ -83,14 +83,14 @@ export default function FeedbackPage() {
           <div className="form-field">
             <label className="form-label">Type</label>
             <div className="flex gap-2">
-              {(["BUG_REPORT", "SUGGESTION", "OTHER"] as const).map((t) => (
+              {(["BUG_REPORT", "SUGGESTION"] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
                   onClick={() => setType(t)}
                   className={`btn btn-sm ${type === t ? "btn-primary" : "btn-secondary"}`}
                 >
-                  {t === "BUG_REPORT" ? "🐛 Bug" : t === "SUGGESTION" ? "💡 Suggestion" : "💬 Other"}
+                  {t === "BUG_REPORT" ? "🐛 Bug" : "💡 Suggestion"}
                 </button>
               ))}
             </div>
@@ -105,9 +105,7 @@ export default function FeedbackPage() {
               placeholder={
                 type === "BUG_REPORT"
                   ? "e.g. Heatmap not loading on mobile"
-                  : type === "SUGGESTION"
-                  ? "e.g. Add dark mode toggle"
-                  : "Short description"
+                  : "e.g. Add dark mode toggle"
               }
               value={title}
               onChange={(e) => setTitle(e.target.value)}

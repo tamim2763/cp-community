@@ -1,9 +1,11 @@
 "use client";
 
+import type { Route } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type NavbarUser = {
   id?: string;
@@ -15,6 +17,32 @@ type NavbarUser = {
 
 export function Navbar({ user }: { user: NavbarUser }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [menuOpen]);
 
   const initials = user?.name
     ? user.name
@@ -28,7 +56,9 @@ export function Navbar({ user }: { user: NavbarUser }) {
   return (
     <nav className="navbar">
       <Link href="/" className="navbar-logo">
-        <div className="navbar-logo-icon">⚡</div>
+        <div className="navbar-logo-icon">
+          <Image src="/images/cse-logo.png" alt="CSE MBSTU Logo" width={32} height={32} className="navbar-logo-image" />
+        </div>
         <span>CP Community</span>
       </Link>
 
@@ -36,7 +66,7 @@ export function Navbar({ user }: { user: NavbarUser }) {
 
       <div className="navbar-actions">
         {user ? (
-          <div style={{ position: "relative" }}>
+          <div ref={menuRef} style={{ position: "relative" }}>
             <button
               className="navbar-user"
               onClick={() => setMenuOpen((v) => !v)}
@@ -52,11 +82,7 @@ export function Navbar({ user }: { user: NavbarUser }) {
             </button>
 
             {menuOpen && (
-              <>
-                <div
-                  style={{ position: "fixed", inset: 0, zIndex: 50 }}
-                  onClick={() => setMenuOpen(false)}
-                />
+              
                 <div
                   style={{
                     position: "absolute",
@@ -75,9 +101,9 @@ export function Navbar({ user }: { user: NavbarUser }) {
                     <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text)" }}>{user.name}</div>
                     <div style={{ fontSize: "0.75rem", color: "var(--text-3)", marginTop: 2 }}>{user.email}</div>
                   </div>
-                  <DropItem href="/dashboard">Dashboard</DropItem>
+                  <DropItem href="/dashboard" onSelect={() => setMenuOpen(false)}>Dashboard</DropItem>
                   {user.role === "ADMIN" || user.role === "SUPER_ADMIN" ? (
-                    <DropItem href="/admin">Admin Panel</DropItem>
+                    <DropItem href="/admin" onSelect={() => setMenuOpen(false)}>Admin Panel</DropItem>
                   ) : null}
                   <div style={{ borderTop: "1px solid var(--border)", margin: "6px 0" }} />
                   <button
@@ -103,7 +129,7 @@ export function Navbar({ user }: { user: NavbarUser }) {
                     Sign out
                   </button>
                 </div>
-              </>
+              
             )}
           </div>
         ) : (
@@ -117,12 +143,12 @@ export function Navbar({ user }: { user: NavbarUser }) {
   );
 }
 
-function DropItem({ href, children }: { href: string; children: React.ReactNode }) {
+function DropItem({ href, children, onSelect }: { href: string; children: React.ReactNode; onSelect?: () => void }) {
   const pathname = usePathname();
   const isActive = pathname.startsWith(href) && href !== "/";
   return (
     <Link
-      href={href}
+      href={href as Route}
       style={{
         display: "block",
         padding: "8px 10px",
@@ -133,6 +159,7 @@ function DropItem({ href, children }: { href: string; children: React.ReactNode 
         background: isActive ? "var(--accent-soft)" : "none",
         transition: "all 0.15s",
       }}
+      onClick={() => onSelect?.()}
       onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = "var(--surface-2)"; }}
       onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = "none"; }}
     >

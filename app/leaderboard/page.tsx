@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { prisma } from "@/lib/prisma";
 import { getWeekBounds } from "@/lib/scoring/weekly-score";
 import { getTierForRank, TIER_CSS_CLASS, TIER_EMOJI } from "@/lib/scoring/tier";
 import Link from "next/link";
+import { getCachedLeaderboard } from "@/lib/public-content-cache";
 
 export const metadata: Metadata = { title: "Leaderboard" };
 export const revalidate = 300; // Refresh every 5 minutes
@@ -15,12 +15,17 @@ function formatScore(val: unknown): string {
   return Number(val).toFixed(2);
 }
 
+function toIsoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
 export default async function LeaderboardPage({
   searchParams,
 }: {
   searchParams: Promise<{ week?: string; platform?: string }>;
 }) {
   const params = await searchParams;
+  const currentWeekBounds = getWeekBounds();
   const { weekStart, weekEnd } = params.week
     ? (() => {
         const ws = new Date(params.week!);
@@ -29,28 +34,14 @@ export default async function LeaderboardPage({
         we.setHours(23, 59, 59, 999);
         return { weekStart: ws, weekEnd: we };
       })()
-    : getWeekBounds();
+    : currentWeekBounds;
 
-  const scores = await prisma.weeklyScore.findMany({
-    where: { weekStart },
-    orderBy: { weightedScore: "desc" },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          username: true,
-          avatarUrl: true,
-          batch: true,
-          department: true,
-          prizeMoneyWon: true,
-          cpProfiles: {
-            select: { platform: true, currentRating: true, handle: true },
-          },
-        },
-      },
-    },
-  });
+  const previousWeekStart = new Date(weekStart);
+  previousWeekStart.setDate(previousWeekStart.getDate() - 7);
+
+  const isCurrentWeekView = weekStart.toISOString() === currentWeekBounds.weekStart.toISOString();
+
+  const scores = await getCachedLeaderboard(weekStart.toISOString());
 
   const weekLabel = weekStart.toLocaleDateString("en-GB", {
     day: "2-digit",
@@ -61,12 +52,6 @@ export default async function LeaderboardPage({
     day: "2-digit",
     month: "short",
     year: "numeric",
-  });
-
-  const tierCounts = { DIAMOND: 0, PLATINUM: 0, GOLD: 0, SILVER: 0, BRONZE: 0 };
-  scores.forEach((_, i) => {
-    const tier = getTierForRank(i + 1);
-    tierCounts[tier]++;
   });
 
   return (
@@ -81,6 +66,17 @@ export default async function LeaderboardPage({
             </p>
           </div>
           <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
+            <Link
+              href={`/leaderboard?week=${toIsoDate(previousWeekStart)}`}
+              className="btn btn-secondary btn-sm"
+            >
+              Last week
+            </Link>
+            {!isCurrentWeekView && (
+              <Link href="/leaderboard" className="btn btn-secondary btn-sm">
+                This week
+              </Link>
+            )}
             <span className="badge badge-neutral">
               {scores.length} participant{scores.length !== 1 ? "s" : ""}
             </span>
@@ -88,42 +84,26 @@ export default async function LeaderboardPage({
         </div>
       </div>
 
-      {/* Tier summary */}
-      <div className="grid-4" style={{ marginBottom: 28 }}>
-        {(["DIAMOND", "PLATINUM", "GOLD", "SILVER", "BRONZE"] as const).map((tier) => (
-          <div key={tier} className={`card tier-badge ${TIER_CSS_CLASS[tier]}`}
-            style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, border: "none" }}
-          >
-            <span style={{ fontSize: "1.5rem" }}>{TIER_EMOJI[tier]}</span>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: "0.85rem" }}>{tier.charAt(0) + tier.slice(1).toLowerCase()}</div>
-              <div style={{ fontSize: "1.1rem", fontWeight: 800 }}>{tierCounts[tier]}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
       {/* Top 3 podium */}
       {scores.length >= 1 && (
-        <div style={{ display: "flex", gap: 16, marginBottom: 28, flexWrap: "wrap" }}>
-          {[1, 0, 2].map((idx) => {
+        <div style={{ display: "flex", gap: 16, marginBottom: 28, flexWrap: "nowrap", overflowX: "auto" }}>
+          {[0, 1, 2].map((idx) => {
             const entry = scores[idx];
             if (!entry) return null;
-            const rank = idx + 1;
+            const rank = entry.rankSnapshot ?? idx + 1;
+            const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : null;
             const tier = getTierForRank(rank);
             const initials = entry.user.name.slice(0, 2).toUpperCase();
-            const podiumOrder = idx === 0 ? 1 : idx === 1 ? 0 : 2;
             return (
               <div
                 key={entry.id}
                 className={`card card-hover`}
                 style={{
-                  flex: "1 1 200px",
+                  flex: "1 0 280px",
                   textAlign: "center",
                   padding: "24px 16px",
-                  order: podiumOrder,
-                  borderColor: rank === 1 ? "var(--diamond)" : rank === 2 ? "var(--platinum)" : "var(--gold)",
-                  boxShadow: rank === 1 ? "0 0 24px var(--diamond-glow)" : undefined,
+                  borderColor: rank === 1 ? "var(--gold)" : rank === 2 ? "var(--silver)" : rank === 3 ? "var(--bronze)" : "var(--border)",
+                  boxShadow: rank === 1 ? "0 0 24px var(--gold-glow)" : undefined,
                 }}
               >
                 <div
@@ -135,10 +115,12 @@ export default async function LeaderboardPage({
                     margin: "0 auto 12px",
                     background:
                       rank === 1
-                        ? "linear-gradient(135deg, var(--diamond), var(--accent))"
+                        ? "linear-gradient(135deg, var(--gold), var(--warning))"
                         : rank === 2
-                        ? "linear-gradient(135deg, var(--platinum-2), var(--silver))"
-                        : "linear-gradient(135deg, var(--gold), var(--bronze))",
+                        ? "linear-gradient(135deg, var(--silver), var(--silver-2))"
+                        : rank === 3
+                        ? "linear-gradient(135deg, var(--bronze), var(--bronze-2))"
+                        : "linear-gradient(135deg, var(--surface-2), var(--surface))",
                   }}
                 >
                   {entry.user.avatarUrl ? (
@@ -147,10 +129,15 @@ export default async function LeaderboardPage({
                     initials
                   )}
                 </div>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>{entry.user.name}</div>
-                <span className={`tier-badge ${TIER_CSS_CLASS[tier]}`}>
-                  {TIER_EMOJI[tier]} #{rank}
-                </span>
+                <Link
+                  href={`/users/${entry.user.id}`}
+                  style={{ fontWeight: 700, display: "inline-block", color: "var(--text)" }}
+                >
+                  {entry.user.name}
+                </Link>
+                <div className="rank-num" style={{ marginTop: 6 }}>
+                  {medal ? `${medal}#${rank}` : `#${rank}`}
+                </div>
                 <div style={{ marginTop: 12, fontSize: "0.8rem", color: "var(--text-3)" }}>
                   <div>{entry.rawSolvedCount} problems</div>
                   <div className="mono">{formatScore(entry.weightedScore)} pts</div>
@@ -168,7 +155,7 @@ export default async function LeaderboardPage({
             <div className="empty-icon">📊</div>
             <div className="empty-title">No data yet for this week</div>
             <div className="empty-text">
-              Link your CP handles on your dashboard and sync will run automatically every 6 hours.
+              Link your CP handles on your dashboard, sync Codeforces, and add CodeChef or AtCoder solves manually.
             </div>
             <Link href="/dashboard" className="btn btn-primary" style={{ marginTop: 8 }}>
               Go to Dashboard
@@ -180,11 +167,10 @@ export default async function LeaderboardPage({
               <tr>
                 <th style={{ width: 60 }}>Rank</th>
                 <th>User</th>
-                <th>Tier</th>
                 <th style={{ textAlign: "center" }}>CF</th>
                 <th style={{ textAlign: "center" }}>CC</th>
                 <th style={{ textAlign: "center" }}>ATC</th>
-                <th style={{ textAlign: "right" }}>Total</th>
+                <th style={{ textAlign: "center" }}>Total</th>
                 <th style={{ textAlign: "right" }}>Score</th>
                 <th style={{ textAlign: "center" }}>Streak</th>
               </tr>
@@ -192,7 +178,7 @@ export default async function LeaderboardPage({
             <tbody>
               {scores.map((entry, i) => {
                 const rank = (entry.rankSnapshot ?? i + 1);
-                const tier = getTierForRank(rank);
+                const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : null;
                 const initials = entry.user.name.slice(0, 2).toUpperCase();
                 return (
                   <tr key={entry.id}>
@@ -200,7 +186,7 @@ export default async function LeaderboardPage({
                       <span
                         className={`rank-num ${rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : ""}`}
                       >
-                        #{rank}
+                        {medal ? `${medal}#${rank}` : `#${rank}`}
                       </span>
                     </td>
                     <td>
@@ -222,9 +208,12 @@ export default async function LeaderboardPage({
                           )}
                         </div>
                         <div>
-                          <div style={{ fontWeight: 600, color: "var(--text)", fontSize: "0.875rem" }}>
+                          <Link
+                            href={`/users/${entry.user.id}`}
+                            style={{ fontWeight: 600, color: "var(--text)", fontSize: "0.875rem", display: "inline-block" }}
+                          >
                             {entry.user.name}
-                          </div>
+                          </Link>
                           {entry.user.batch && (
                             <div style={{ fontSize: "0.72rem", color: "var(--text-3)" }}>
                               Batch {entry.user.batch}
@@ -232,11 +221,6 @@ export default async function LeaderboardPage({
                           )}
                         </div>
                       </div>
-                    </td>
-                    <td>
-                      <span className={`tier-badge ${TIER_CSS_CLASS[tier]}`} style={{ fontSize: "0.7rem" }}>
-                        {TIER_EMOJI[tier]} {tier.charAt(0) + tier.slice(1).toLowerCase()}
-                      </span>
                     </td>
                     <td style={{ textAlign: "center" }}>
                       <span className="platform-chip platform-cf">
@@ -253,7 +237,7 @@ export default async function LeaderboardPage({
                         {entry.atcoderSolvedCount}
                       </span>
                     </td>
-                    <td style={{ textAlign: "right", fontWeight: 700, color: "var(--text)" }}>
+                    <td style={{ textAlign: "center", fontWeight: 700, color: "var(--text)" }}>
                       {entry.rawSolvedCount}
                     </td>
                     <td style={{ textAlign: "right" }}>
@@ -282,15 +266,15 @@ export default async function LeaderboardPage({
       <div className="card" style={{ marginTop: 24 }}>
         <div className="section-title">📐 How scoring works</div>
         <div style={{ display: "grid", gap: 8, fontSize: "0.875rem", color: "var(--text-2)" }}>
-          <p>Each accepted unique problem gives a <strong style={{ color: "var(--text)" }}>weighted score</strong> based on difficulty and your current rating.</p>
-          <p><span className="mono" style={{ color: "var(--accent-2)" }}>score = (problem_rating / 400) × challenge_multiplier</span></p>
-          <p>Challenge multiplier increases when you solve problems harder than your rating, and decreases for easy ones — preventing leaderboard farming.</p>
+          <p>Each accepted unique problem gives a <strong style={{ color: "var(--text)" }}>weighted score</strong> based on problem rating and your current platform rating.</p>
+          <p><span className="mono" style={{ color: "var(--accent-2)" }}>unrated = 1 point, rated = 1 × gap_multiplier</span></p>
+          <p>The gap multiplier changes exponentially by <strong style={{ color: "var(--text)" }}>10% per 100 rating gap</strong>, so the score measures relative challenge for each user.</p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
-            <span className="badge" style={{ fontSize: "0.72rem" }}>+400 above → 1.5×</span>
-            <span className="badge" style={{ fontSize: "0.72rem" }}>+100–400 → 1.3×</span>
-            <span className="badge" style={{ fontSize: "0.72rem" }}>±100 → 1.0×</span>
-            <span className="badge badge-neutral" style={{ fontSize: "0.72rem" }}>-100–300 → 0.75×</span>
-            <span className="badge badge-neutral" style={{ fontSize: "0.72rem" }}>-300+ → 0.5×</span>
+            <span className="badge" style={{ fontSize: "0.72rem" }}>+100 → 1.1×</span>
+            <span className="badge" style={{ fontSize: "0.72rem" }}>+200 → 1.21×</span>
+            <span className="badge" style={{ fontSize: "0.72rem" }}>+300 → 1.33×</span>
+            <span className="badge badge-neutral" style={{ fontSize: "0.72rem" }}>-100 → 0.91×</span>
+            <span className="badge badge-neutral" style={{ fontSize: "0.72rem" }}>-200 → 0.83×</span>
           </div>
         </div>
       </div>

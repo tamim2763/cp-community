@@ -1,41 +1,33 @@
 /**
  * Tier assignment based on weekly rank.
- * Rank 1       → Diamond
- * Rank 2–3     → Platinum
- * Rank 4–10    → Gold
- * Rank 11–25   → Silver
- * Rank 26+     → Bronze
+ * Rank 1 → Gold
+ * Rank 2 → Silver
+ * Rank 3 → Bronze
+ * Rank 4+ → no tier
  */
 
-export type Tier = "DIAMOND" | "PLATINUM" | "GOLD" | "SILVER" | "BRONZE";
+export type Tier = "GOLD" | "SILVER" | "BRONZE";
 
-export function getTierForRank(rank: number): Tier {
-  if (rank === 1) return "DIAMOND";
-  if (rank <= 3) return "PLATINUM";
-  if (rank <= 10) return "GOLD";
-  if (rank <= 25) return "SILVER";
-  return "BRONZE";
+export function getTierForRank(rank: number): Tier | null {
+  if (rank === 1) return "GOLD";
+  if (rank === 2) return "SILVER";
+  if (rank === 3) return "BRONZE";
+  return null;
 }
 
 export const TIER_LABELS: Record<Tier, string> = {
-  DIAMOND: "Diamond",
-  PLATINUM: "Platinum",
   GOLD: "Gold",
   SILVER: "Silver",
   BRONZE: "Bronze",
 };
 
 export const TIER_EMOJI: Record<Tier, string> = {
-  DIAMOND: "💎",
-  PLATINUM: "🪙",
   GOLD: "🥇",
   SILVER: "🥈",
   BRONZE: "🥉",
 };
 
 export const TIER_CSS_CLASS: Record<Tier, string> = {
-  DIAMOND: "tier-diamond",
-  PLATINUM: "tier-platinum",
   GOLD: "tier-gold",
   SILVER: "tier-silver",
   BRONZE: "tier-bronze",

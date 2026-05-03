@@ -49,5 +49,8 @@ export function createChallenge(platform: CpPlatform, baselineSubmissionId: stri
 }
 
 export function getVerificationInstructions(platform: CpPlatform, challenge: VerificationChallenge) {
+  if (platform === "ATCODER") {
+    return `AtCoder proof: Copy this token and temporarily paste it anywhere into your AtCoder Affiliation field (Settings > Profile > Affiliation). Then click Verify.`;
+  }
   return `${getPlatformLabel(platform)} proof: open ${challenge.problemName} (${challenge.problemUrl}) and submit any code that causes a Compilation Error within the next 15 minutes. Then click Verify ownership.`;
 }

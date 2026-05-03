@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { prisma } from "@/lib/prisma";
+import { getCachedJobs } from "@/lib/public-content-cache";
 
 export const metadata: Metadata = { title: "Jobs & Internships" };
 export const revalidate = 600;
@@ -21,10 +21,7 @@ const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 export default async function JobsPage() {
-  const jobs = await prisma.job.findMany({
-    where: { isActive: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const jobs = await getCachedJobs();
 
   return (
     <div className="page-container">

@@ -7,7 +7,6 @@ export default function NewAchievementPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [caption, setCaption] = useState("");
-  const [platform, setPlatform] = useState("");
   const [achievementDate, setAchievementDate] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -57,7 +56,6 @@ export default function NewAchievementPage() {
         body: JSON.stringify({
           title: title.trim() || null,
           caption: caption.trim(),
-          platform: platform || null,
           achievementDate: achievementDate || null,
           imageUrl: uploadData.secure_url,
           imagePublicId: uploadData.public_id,
@@ -140,20 +138,9 @@ export default function NewAchievementPage() {
           <textarea id="ach-caption" className="form-input form-textarea" placeholder="Tell us about this achievement..." value={caption} onChange={(e) => setCaption(e.target.value)} rows={3} required />
         </div>
 
-        <div className="grid-2" style={{ gap: 16 }}>
-          <div className="form-field">
-            <label className="form-label">Platform</label>
-            <select className="form-input form-select" value={platform} onChange={(e) => setPlatform(e.target.value)}>
-              <option value="">Select platform</option>
-              <option value="CODEFORCES">Codeforces</option>
-              <option value="CODECHEF">CodeChef</option>
-              <option value="ATCODER">AtCoder</option>
-            </select>
-          </div>
-          <div className="form-field">
-            <label className="form-label">Date (optional)</label>
-            <input type="date" className="form-input" value={achievementDate} onChange={(e) => setAchievementDate(e.target.value)} />
-          </div>
+        <div className="form-field">
+          <label className="form-label">Date (optional)</label>
+          <input type="date" className="form-input" value={achievementDate} onChange={(e) => setAchievementDate(e.target.value)} />
         </div>
 
         {error && <p className="form-error">{error}</p>}
