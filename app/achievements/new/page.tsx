@@ -37,18 +37,15 @@ export default function NewAchievementPage() {
     try {
       const fd = new FormData();
       fd.append("file", imageFile);
-      fd.append("upload_preset", "cp_achievements");
 
-      // Upload to Cloudinary
-      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-      if (!cloudName) throw new Error("Cloudinary not configured");
-
-      const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+      const uploadRes = await fetch("/api/uploads/achievement", {
         method: "POST",
         body: fd,
       });
-      const uploadData = await uploadRes.json() as { secure_url?: string; public_id?: string };
-      if (!uploadData.secure_url) throw new Error("Image upload failed");
+      const uploadData = await uploadRes.json() as { secure_url?: string; public_id?: string; error?: string };
+      if (!uploadRes.ok || !uploadData.secure_url) {
+        throw new Error(uploadData.error ?? "Image upload failed");
+      }
 
       const res = await fetch("/api/achievements", {
         method: "POST",
