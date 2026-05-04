@@ -40,6 +40,7 @@ jobs:
           mkdir -p dist/.next
           cp -r .next/standalone/* dist/
           cp -r public dist/public
+          cp -r .next/server dist/.next/server
           cp -r .next/static dist/.next/static
           cp .next/BUILD_ID dist/.next/BUILD_ID
           cp .next/required-server-files.json dist/.next/required-server-files.json
