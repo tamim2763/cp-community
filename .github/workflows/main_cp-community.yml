@@ -34,16 +34,25 @@ jobs:
           npm run build --if-present
           npm run test --if-present
 
-      - name: Package standalone output
+      - name: Prepare standalone bundle
         run: |
-          cp -r public .next/standalone/public
-          cp -r .next/static .next/standalone/.next/static
+          rm -rf dist
+          mkdir -p dist/.next
+          cp -r .next/standalone/* dist/
+          cp -r public dist/public
+          cp -r .next/static dist/.next/static
+          cp .next/BUILD_ID dist/.next/BUILD_ID
+          cp .next/required-server-files.json dist/.next/required-server-files.json
+          cp .next/routes-manifest.json dist/.next/routes-manifest.json
+          cp .next/prerender-manifest.json dist/.next/prerender-manifest.json
+          cp .next/build-manifest.json dist/.next/build-manifest.json
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: .next/standalone
+          path: dist
+          include-hidden-files: true
 
   deploy:
     runs-on: ubuntu-latest
@@ -54,6 +63,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
+          path: dist
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
@@ -61,5 +71,5 @@ jobs:
         with:
           app-name: 'cp-community'
           slot-name: 'Production'
-          package: .
+          package: dist
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_3B4CF3338B7A4684A9C8C7FEC11417CF }}
