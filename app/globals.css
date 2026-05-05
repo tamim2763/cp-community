@@ -703,8 +703,10 @@ ul, ol { list-style: none; }
   width: 100%;
   aspect-ratio: 16 / 9;
   border-radius: var(--radius-lg);
-  overflow: hidden;
   background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .video-embed iframe {
@@ -713,6 +715,14 @@ ul, ol { list-style: none; }
   width: 100%;
   height: 100%;
   border: 0;
+  border-radius: inherit;
+  display: block;
+}
+
+@media (max-width: 640px) {
+  .video-embed {
+    aspect-ratio: 16 / 10;
+  }
 }
 
 /* ─── Grid / layout helpers ───────────────────────────── */
