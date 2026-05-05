@@ -39,7 +39,15 @@ const navGroups: Array<{
   },
 ];
 
-export function Sidebar({ user }: { user?: { role?: string } | null }) {
+export function Sidebar({
+  user,
+  isOpen = false,
+  onNavigate,
+}: {
+  user?: { role?: string } | null;
+  isOpen?: boolean;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
 
   // Clone navGroups so we can append the How to use group locally
@@ -53,7 +61,7 @@ export function Sidebar({ user }: { user?: { role?: string } | null }) {
   });
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isOpen ? "open" : ""}`}>
       {groups.map((group) => (
         <div key={group.label} className="sidebar-section">
           <div className="sidebar-label">{group.label}</div>
@@ -73,6 +81,7 @@ export function Sidebar({ user }: { user?: { role?: string } | null }) {
                 key={String(link.href)}
                 href={link.href}
                 className={`sidebar-link ${isActive ? "active" : ""}`}
+                onClick={() => onNavigate?.()}
               >
                 <span style={{ fontSize: "1rem", lineHeight: 1 }}>{link.icon}</span>
                 <span>{link.label}</span>

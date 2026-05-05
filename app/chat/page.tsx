@@ -32,15 +32,7 @@ export default async function ChatPage() {
   });
 
   return (
-    <div style={{
-      position: "fixed",
-      top: "var(--nav-h)",
-      left: "var(--sidebar-w)",
-      right: 0,
-      bottom: 0,
-      display: "flex",
-      overflow: "hidden",
-    }}>
+    <div className="chat-shell">
       {/* Chat area */}
       <ChatRoom
         roomId={room.id}
