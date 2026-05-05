@@ -75,7 +75,8 @@ export function RegisterForm() {
         <div>
           <div style={{ fontWeight: 700, fontSize: "1rem" }}>Waiting for verification</div>
           <p className="auth-subtitle" style={{ margin: "6px 0 0" }}>
-            We sent a verification link to <strong>{submittedEmail}</strong>.
+            We sent a verification link to <strong>{submittedEmail}</strong>. If you do not see it,
+            check your spam folder.
           </p>
         </div>
         <p className="form-hint">Once you verify, this page will update automatically.</p>
