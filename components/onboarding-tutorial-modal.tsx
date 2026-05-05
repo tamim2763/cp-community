@@ -75,17 +75,9 @@ export function OnboardingTutorialModal({ userId }: { userId: string }) {
         </div>
 
         {/* Video embed */}
-        <div style={{ position: "relative", paddingTop: "56.25%", borderRadius: "var(--radius-lg)", overflow: "hidden" }}>
+        <div className="video-embed">
           <iframe
             src="https://drive.google.com/file/d/1A32LbE9CyLLVQ0AzXDXvMAx0KWkw9btP/preview"
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-              border: "none",
-            }}
             allowFullScreen
             title="How to use — User Tutorial"
           />

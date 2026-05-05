@@ -18,10 +18,9 @@ export default async function HowToAdminPage() {
       </div>
 
       <div className="card">
-        <div style={{ position: "relative", paddingTop: "56.25%", marginBottom: 16 }}>
+        <div className="video-embed" style={{ marginBottom: 16 }}>
           <iframe
             src={VIDEO_EMBED}
-            style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: 0 }}
             allowFullScreen
             title="How to use — Admin"
           />
