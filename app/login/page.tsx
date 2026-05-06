@@ -19,11 +19,20 @@ function normalizeCallbackUrl(value?: string): `/${string}` {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ callbackUrl?: string }>;
+  searchParams: Promise<{ callbackUrl?: string; error?: string }>;
 }) {
   const session = await auth();
   const params = await searchParams;
   const callbackUrl = normalizeCallbackUrl(params.callbackUrl);
+  const error = params.error;
+  const externalError =
+    error === "institutional"
+      ? "Please use your MBSTU CSE email for Google sign-in."
+      : error === "unverified"
+        ? "Your Google account email is not verified."
+        : error === "inactive"
+          ? "Your account is inactive. Please contact an admin."
+          : null;
 
   if (session?.user) {
     redirect(callbackUrl as never);
@@ -35,7 +44,7 @@ export default async function LoginPage({
         <div className="auth-card">
           <h1>Log in</h1>
           <p className="auth-subtitle">Access your CP community dashboard.</p>
-          <LoginForm callbackUrl={callbackUrl} />
+          <LoginForm callbackUrl={callbackUrl} externalError={externalError} />
         </div>
       </section>
     </main>

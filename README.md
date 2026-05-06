@@ -102,6 +102,8 @@ A comprehensive competitive programming community platform built with modern web
    # Authentication
    NEXTAUTH_SECRET="generate-a-random-secret"
    NEXTAUTH_URL="http://localhost:3000"
+  GOOGLE_CLIENT_ID="your-google-client-id"
+  GOOGLE_CLIENT_SECRET="your-google-client-secret"
    ```
 
 4. **Generate Prisma Client**
