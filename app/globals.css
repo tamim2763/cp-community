@@ -715,6 +715,18 @@ ul, ol { list-style: none; }
   }
 }
 
+.submission-toast {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--success);
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 0.85rem;
+  text-align: center;
+  animation: auth-toast-in 0.2s ease-out;
+}
+
 .auth-spinner {
   width: 42px;
   height: 42px;

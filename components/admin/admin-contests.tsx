@@ -10,6 +10,7 @@ type Contest = {
   url: string;
   startTime: string;
   durationMinutes: number | null;
+  isVisible: boolean;
 };
 
 type ContestForm = {
@@ -32,6 +33,7 @@ export function AdminContests() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   async function loadContests() {
     setLoading(true);
@@ -83,6 +85,7 @@ export function AdminContests() {
   async function remove(id: string) {
     if (!window.confirm("Delete this manual contest?")) return;
 
+    setBusyId(id);
     try {
       const response = await fetch("/api/admin/contests", {
         method: "DELETE",
@@ -94,6 +97,30 @@ export function AdminContests() {
       setContests((current) => current.filter((contest) => contest.id !== id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete contest.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function approve(id: string) {
+    setBusyId(id);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/admin/contests", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, isVisible: true }),
+      });
+      const data = (await response.json()) as { contest?: Contest; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Failed to approve contest.");
+      setContests((current) =>
+        current.map((contest) => (contest.id === id ? { ...contest, isVisible: true } : contest)),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to approve contest.");
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -138,28 +165,76 @@ export function AdminContests() {
       </form>
 
       <div className="card" style={{ display: "grid", gap: 14 }}>
+        <div className="card-title">Pending contests</div>
+        {loading ? (
+          <div className="card-subtitle">Loading contests...</div>
+        ) : contests.filter((contest) => !contest.isVisible).length === 0 ? (
+          <div className="card-subtitle">No pending contests yet.</div>
+        ) : (
+          <div style={{ display: "grid", gap: 12 }}>
+            {contests
+              .filter((contest) => !contest.isVisible)
+              .map((contest) => (
+                <div key={contest.id} className="card" style={{ padding: 16, display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{contest.title}</div>
+                    <div style={{ color: "var(--text-2)", fontSize: "0.9rem", marginTop: 4 }}>
+                      {contest.source === "MANUAL" ? "CUSTOM" : contest.platform ?? "Unknown"} • {new Date(contest.startTime).toLocaleString("en-GB")}
+                      {contest.durationMinutes ? ` • ${contest.durationMinutes}m` : ""}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <a href={contest.url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">Open</a>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={busyId === contest.id}
+                      onClick={() => void approve(contest.id)}
+                    >
+                      {busyId === contest.id ? "Approving..." : "Approve"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      disabled={busyId === contest.id}
+                      onClick={() => void remove(contest.id)}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{ display: "grid", gap: 14 }}>
         <div className="card-title">Manual contests</div>
         {loading ? (
           <div className="card-subtitle">Loading contests...</div>
-        ) : contests.length === 0 ? (
+        ) : contests.filter((contest) => contest.isVisible).length === 0 ? (
           <div className="card-subtitle">No manual contests yet.</div>
         ) : (
           <div style={{ display: "grid", gap: 12 }}>
-            {contests.map((contest) => (
-              <div key={contest.id} className="card" style={{ padding: 16, display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-                <div>
-                  <div style={{ fontWeight: 700 }}>{contest.title}</div>
-                  <div style={{ color: "var(--text-2)", fontSize: "0.9rem", marginTop: 4 }}>
-                    {contest.source === "MANUAL" ? "CUSTOM" : contest.platform ?? "Unknown"} • {new Date(contest.startTime).toLocaleString("en-GB")}
-                    {contest.durationMinutes ? ` • ${contest.durationMinutes}m` : ""}
+            {contests
+              .filter((contest) => contest.isVisible)
+              .map((contest) => (
+                <div key={contest.id} className="card" style={{ padding: 16, display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{contest.title}</div>
+                    <div style={{ color: "var(--text-2)", fontSize: "0.9rem", marginTop: 4 }}>
+                      {contest.source === "MANUAL" ? "CUSTOM" : contest.platform ?? "Unknown"} • {new Date(contest.startTime).toLocaleString("en-GB")}
+                      {contest.durationMinutes ? ` • ${contest.durationMinutes}m` : ""}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <a href={contest.url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">Open</a>
+                    <button type="button" className="btn btn-danger btn-sm" onClick={() => void remove(contest.id)}>
+                      Delete
+                    </button>
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <a href={contest.url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">Open</a>
-                  <button type="button" className="btn btn-danger btn-sm" onClick={() => void remove(contest.id)}>Delete</button>
-                </div>
-              </div>
-            ))}
+              ))}
           </div>
         )}
       </div>

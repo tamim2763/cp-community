@@ -5,6 +5,24 @@ import { getWeekBounds } from "@/lib/scoring/weekly-score";
 
 const CACHE_TTL_SECONDS = 300;
 
+function getDhakaStartOfToday() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Dhaka",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const getPart = (type: Intl.DateTimeFormatPartTypes[number]) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  const year = getPart("year");
+  const month = getPart("month");
+  const day = getPart("day");
+
+  return new Date(`${year}-${month}-${day}T00:00:00+06:00`);
+}
+
 export const getCachedAchievements = unstable_cache(
   async () => {
     return prisma.achievement.findMany({
@@ -48,8 +66,12 @@ export const getCachedResources = unstable_cache(
 
 export const getCachedJobs = unstable_cache(
   async () => {
+    const startOfToday = getDhakaStartOfToday();
     return prisma.job.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        OR: [{ deadline: null }, { deadline: { gte: startOfToday } }],
+      },
       orderBy: { createdAt: "desc" },
     });
   },

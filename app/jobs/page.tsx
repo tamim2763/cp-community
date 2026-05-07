@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { auth } from "@/auth";
+import { JobSubmissionSection } from "@/components/submissions/job-submission-section";
 import { getCachedJobs } from "@/lib/public-content-cache";
 
 export const metadata: Metadata = { title: "Jobs & Internships" };
@@ -20,17 +22,32 @@ const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   REMOTE: { bg: "rgba(103,232,249,0.1)", color: "var(--diamond-2)" },
 };
 
+function getDhakaStartOfToday() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Dhaka",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const getPart = (type: Intl.DateTimeFormatPartTypes[number]) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  const year = getPart("year");
+  const month = getPart("month");
+  const day = getPart("day");
+
+  return new Date(`${year}-${month}-${day}T00:00:00+06:00`);
+}
+
 export default async function JobsPage() {
+  const session = await auth();
   const jobs = await getCachedJobs();
+  const dhakaStartOfToday = getDhakaStartOfToday();
 
   return (
     <div className="page-container">
-      <div className="page-header">
-        <h1 className="page-title">💼 Jobs &amp; Internships</h1>
-        <p className="page-subtitle">
-          Opportunities posted for our CP community members
-        </p>
-      </div>
+      <JobSubmissionSection showSubmission={!!session?.user} />
 
       {jobs.length === 0 ? (
         <div className="empty-state">
@@ -44,7 +61,7 @@ export default async function JobsPage() {
         <div style={{ display: "grid", gap: 16 }}>
           {jobs.map((job) => {
             const typeColor = TYPE_COLORS[job.type] ?? TYPE_COLORS.INTERNSHIP;
-            const isExpired = job.deadline && new Date(job.deadline) < new Date();
+            const isExpired = job.deadline && new Date(job.deadline) < dhakaStartOfToday;
 
             return (
               <div

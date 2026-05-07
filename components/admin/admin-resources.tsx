@@ -13,6 +13,7 @@ type Resource = {
   title: string;
   description: string;
   url: string;
+  isPublished: boolean;
   platform: string | null;
   difficultyLevel: string | null;
   category: Category | null;
@@ -45,6 +46,7 @@ export function AdminResources() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   async function loadResources() {
     setLoading(true);
@@ -113,6 +115,7 @@ export function AdminResources() {
   async function remove(id: string) {
     if (!window.confirm("Delete this resource?")) return;
 
+    setBusyId(id);
     try {
       const response = await fetch("/api/admin/resources", {
         method: "DELETE",
@@ -124,6 +127,30 @@ export function AdminResources() {
       setResources((current) => current.filter((resource) => resource.id !== id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete resource.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function approve(id: string) {
+    setBusyId(id);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/admin/resources", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, isPublished: true }),
+      });
+      const data = (await response.json()) as { resource?: Resource; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Failed to publish resource.");
+      setResources((current) =>
+        current.map((resource) => (resource.id === id ? { ...resource, isPublished: true } : resource)),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to publish resource.");
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -168,30 +195,80 @@ export function AdminResources() {
       </form>
 
       <div className="card" style={{ display: "grid", gap: 14 }}>
+        <div className="card-title">Pending resources</div>
+        {loading ? (
+          <div className="card-subtitle">Loading resources...</div>
+        ) : resources.filter((resource) => !resource.isPublished).length === 0 ? (
+          <div className="card-subtitle">No pending resources.</div>
+        ) : (
+          <div style={{ display: "grid", gap: 12 }}>
+            {resources
+              .filter((resource) => !resource.isPublished)
+              .map((resource) => (
+                <div key={resource.id} className="card" style={{ padding: 16, display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{resource.title}</div>
+                    <div style={{ color: "var(--text-2)", fontSize: "0.9rem", marginTop: 4 }}>{resource.description}</div>
+                    <div style={{ color: "var(--text-3)", fontSize: "0.8rem", marginTop: 6 }}>
+                      {resource.category?.name ?? "Uncategorized"}
+                      {resource.difficultyLevel ? ` • ${resource.difficultyLevel}` : ""}
+                      {resource.platform ? ` • ${resource.platform}` : ""}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <a href={resource.url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">Open</a>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={busyId === resource.id}
+                      onClick={() => void approve(resource.id)}
+                    >
+                      {busyId === resource.id ? "Approving..." : "Approve"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      disabled={busyId === resource.id}
+                      onClick={() => void remove(resource.id)}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{ display: "grid", gap: 14 }}>
         <div className="card-title">Current resources</div>
         {loading ? (
           <div className="card-subtitle">Loading resources...</div>
-        ) : resources.length === 0 ? (
+        ) : resources.filter((resource) => resource.isPublished).length === 0 ? (
           <div className="card-subtitle">No resources yet.</div>
         ) : (
           <div style={{ display: "grid", gap: 12 }}>
-            {resources.map((resource) => (
-              <div key={resource.id} className="card" style={{ padding: 16, display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-                <div>
-                  <div style={{ fontWeight: 700 }}>{resource.title}</div>
-                  <div style={{ color: "var(--text-2)", fontSize: "0.9rem", marginTop: 4 }}>{resource.description}</div>
-                  <div style={{ color: "var(--text-3)", fontSize: "0.8rem", marginTop: 6 }}>
-                    {resource.category?.name ?? "Uncategorized"}
-                    {resource.difficultyLevel ? ` • ${resource.difficultyLevel}` : ""}
-                    {resource.platform ? ` • ${resource.platform}` : ""}
+            {resources
+              .filter((resource) => resource.isPublished)
+              .map((resource) => (
+                <div key={resource.id} className="card" style={{ padding: 16, display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{resource.title}</div>
+                    <div style={{ color: "var(--text-2)", fontSize: "0.9rem", marginTop: 4 }}>{resource.description}</div>
+                    <div style={{ color: "var(--text-3)", fontSize: "0.8rem", marginTop: 6 }}>
+                      {resource.category?.name ?? "Uncategorized"}
+                      {resource.difficultyLevel ? ` • ${resource.difficultyLevel}` : ""}
+                      {resource.platform ? ` • ${resource.platform}` : ""}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <a href={resource.url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">Open</a>
+                    <button type="button" className="btn btn-danger btn-sm" onClick={() => void remove(resource.id)}>
+                      Delete
+                    </button>
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <a href={resource.url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">Open</a>
-                  <button type="button" className="btn btn-danger btn-sm" onClick={() => void remove(resource.id)}>Delete</button>
-                </div>
-              </div>
-            ))}
+              ))}
           </div>
         )}
       </div>

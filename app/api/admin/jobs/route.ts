@@ -4,7 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { adminErrorResponse } from "@/lib/api/admin";
 import { requireAdmin } from "@/lib/admin-guard";
 import { prisma } from "@/lib/prisma";
-import { deleteByIdSchema, jobSchema } from "@/lib/validations/admin";
+import { deleteByIdSchema, jobActivationSchema, jobSchema } from "@/lib/validations/admin";
 
 export async function GET() {
   try {
@@ -60,6 +60,25 @@ export async function DELETE(request: Request) {
     revalidateTag("public-jobs");
 
     return NextResponse.json({ ok: true });
+  } catch (error) {
+    return adminErrorResponse(error);
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    await requireAdmin();
+    const body = jobActivationSchema.parse(await request.json());
+
+    const job = await prisma.job.update({
+      where: { id: body.id },
+      data: { isActive: body.isActive },
+    });
+
+    revalidatePath("/jobs");
+    revalidateTag("public-jobs");
+
+    return NextResponse.json({ ok: true, job });
   } catch (error) {
     return adminErrorResponse(error);
   }

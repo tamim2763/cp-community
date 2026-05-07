@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { auth } from "@/auth";
+import { ResourceSubmissionSection } from "@/components/submissions/resource-submission-section";
 import { getCachedResources } from "@/lib/public-content-cache";
 
 export const metadata: Metadata = { title: "Resources" };
@@ -12,6 +14,7 @@ export default async function ResourcesPage({
 }: {
   searchParams: Promise<{ category?: string }>;
 }) {
+  const session = await auth();
   const params = await searchParams;
 
   const selectedCategory =
@@ -26,10 +29,14 @@ export default async function ResourcesPage({
 
   return (
     <div className="page-container">
-      <div className="page-header">
-        <h1 className="page-title">📚 Resources</h1>
-        <p className="page-subtitle">Curated competitive programming resources organized by topic</p>
-      </div>
+      <ResourceSubmissionSection
+        categories={categories.map((category) => ({
+          id: category.id,
+          name: category.name,
+          slug: category.slug,
+        }))}
+        showSubmission={!!session?.user}
+      />
 
       {/* Filters */}
       <div className="flex gap-2" style={{ marginBottom: 28, flexWrap: "wrap" }}>

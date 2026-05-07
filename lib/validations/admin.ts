@@ -87,6 +87,21 @@ export const jobSchema = z.object({
   deadline: z.string().trim().optional().or(z.literal("")),
 });
 
+export const resourcePublishSchema = z.object({
+  id: z.string().trim().min(1, "Missing id."),
+  isPublished: z.boolean(),
+});
+
+export const contestVisibilitySchema = z.object({
+  id: z.string().trim().min(1, "Missing id."),
+  isVisible: z.boolean(),
+});
+
+export const jobActivationSchema = z.object({
+  id: z.string().trim().min(1, "Missing id."),
+  isActive: z.boolean(),
+});
+
 export const announcementSchema = z
   .object({
     content: trimmed(4, 2000),

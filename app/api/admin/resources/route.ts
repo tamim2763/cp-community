@@ -4,7 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { adminErrorResponse } from "@/lib/api/admin";
 import { requireAdmin } from "@/lib/admin-guard";
 import { prisma } from "@/lib/prisma";
-import { deleteByIdSchema, resourceSchema } from "@/lib/validations/admin";
+import { deleteByIdSchema, resourcePublishSchema, resourceSchema } from "@/lib/validations/admin";
 
 function slugify(value: string) {
   return value
@@ -82,6 +82,29 @@ export async function DELETE(request: Request) {
     revalidateTag("public-resources");
 
     return NextResponse.json({ ok: true });
+  } catch (error) {
+    return adminErrorResponse(error);
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const adminUser = await requireAdmin();
+    const body = resourcePublishSchema.parse(await request.json());
+
+    const resource = await prisma.resource.update({
+      where: { id: body.id },
+      data: {
+        isPublished: body.isPublished,
+        updatedById: adminUser.id,
+      },
+      include: { category: { select: { id: true, name: true, slug: true } } },
+    });
+
+    revalidatePath("/resources");
+    revalidateTag("public-resources");
+
+    return NextResponse.json({ ok: true, resource });
   } catch (error) {
     return adminErrorResponse(error);
   }

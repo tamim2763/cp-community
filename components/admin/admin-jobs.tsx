@@ -40,6 +40,7 @@ export function AdminJobs() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   async function loadJobs() {
     setLoading(true);
@@ -89,6 +90,7 @@ export function AdminJobs() {
   async function remove(id: string) {
     if (!window.confirm("Remove this job listing?")) return;
 
+    setBusyId(id);
     try {
       const response = await fetch("/api/admin/jobs", {
         method: "DELETE",
@@ -100,6 +102,28 @@ export function AdminJobs() {
       setJobs((current) => current.filter((job) => job.id !== id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove job.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function approve(id: string) {
+    setBusyId(id);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/admin/jobs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, isActive: true }),
+      });
+      const data = (await response.json()) as { job?: Job; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Failed to approve job.");
+      setJobs((current) => current.map((job) => (job.id === id ? { ...job, isActive: true } : job)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to approve job.");
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -145,34 +169,84 @@ export function AdminJobs() {
       </form>
 
       <div className="card" style={{ display: "grid", gap: 14 }}>
+        <div className="card-title">Pending jobs</div>
+        {loading ? (
+          <div className="card-subtitle">Loading jobs...</div>
+        ) : jobs.filter((job) => !job.isActive).length === 0 ? (
+          <div className="card-subtitle">No pending jobs.</div>
+        ) : (
+          <div style={{ display: "grid", gap: 12 }}>
+            {jobs
+              .filter((job) => !job.isActive)
+              .map((job) => (
+                <div key={job.id} className="card" style={{ padding: 16, display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{job.title}</div>
+                    <div style={{ color: "var(--text-2)", fontSize: "0.9rem", marginTop: 4 }}>
+                      {job.company}
+                      {job.location ? ` • ${job.location}` : ""}
+                      {job.type ? ` • ${job.type}` : ""}
+                    </div>
+                    <div style={{ color: "var(--text-3)", fontSize: "0.8rem", marginTop: 6 }}>
+                      {job.deadline ? `Deadline: ${new Date(job.deadline).toLocaleDateString("en-GB")}` : "No deadline"}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    {job.applyUrl ? <a href={job.applyUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">Open</a> : null}
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={busyId === job.id}
+                      onClick={() => void approve(job.id)}
+                    >
+                      {busyId === job.id ? "Approving..." : "Approve"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      disabled={busyId === job.id}
+                      onClick={() => void remove(job.id)}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{ display: "grid", gap: 14 }}>
         <div className="card-title">All job listings</div>
         {loading ? (
           <div className="card-subtitle">Loading jobs...</div>
-        ) : jobs.length === 0 ? (
+        ) : jobs.filter((job) => job.isActive).length === 0 ? (
           <div className="card-subtitle">No jobs yet.</div>
         ) : (
           <div style={{ display: "grid", gap: 12 }}>
-            {jobs.map((job) => (
-              <div key={job.id} className="card" style={{ padding: 16, display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-                <div>
-                  <div style={{ fontWeight: 700 }}>{job.title}</div>
-                  <div style={{ color: "var(--text-2)", fontSize: "0.9rem", marginTop: 4 }}>
-                    {job.company}
-                    {job.location ? ` • ${job.location}` : ""}
-                    {job.type ? ` • ${job.type}` : ""}
+            {jobs
+              .filter((job) => job.isActive)
+              .map((job) => (
+                <div key={job.id} className="card" style={{ padding: 16, display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{job.title}</div>
+                    <div style={{ color: "var(--text-2)", fontSize: "0.9rem", marginTop: 4 }}>
+                      {job.company}
+                      {job.location ? ` • ${job.location}` : ""}
+                      {job.type ? ` • ${job.type}` : ""}
+                    </div>
+                    <div style={{ color: "var(--text-3)", fontSize: "0.8rem", marginTop: 6 }}>
+                      {job.deadline ? `Deadline: ${new Date(job.deadline).toLocaleDateString("en-GB")}` : "No deadline"}
+                    </div>
                   </div>
-                  <div style={{ color: "var(--text-3)", fontSize: "0.8rem", marginTop: 6 }}>
-                    {job.deadline ? `Deadline: ${new Date(job.deadline).toLocaleDateString("en-GB")}` : "No deadline"}
+                  <div style={{ display: "flex", gap: 10 }}>
+                    {job.applyUrl ? <a href={job.applyUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">Open</a> : null}
+                    <button type="button" className="btn btn-danger btn-sm" onClick={() => void remove(job.id)}>
+                      Remove
+                    </button>
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 10 }}>
-                  {job.applyUrl ? <a href={job.applyUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">Open</a> : null}
-                  <button type="button" className="btn btn-danger btn-sm" onClick={() => void remove(job.id)}>
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))}
           </div>
         )}
       </div>

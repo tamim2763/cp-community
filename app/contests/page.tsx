@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { auth } from "@/auth";
+import { ContestSubmissionSection } from "@/components/submissions/contest-submission-section";
 import { getCachedContests } from "@/lib/public-content-cache";
 
 export const metadata: Metadata = { title: "Contest Schedule" };
@@ -73,20 +75,13 @@ export default async function ContestsPage({
 }: {
   searchParams: Promise<{ platform?: string }>;
 }) {
+  const session = await auth();
   const params = await searchParams;
   const contests = await getCachedContests(params.platform);
 
   return (
     <div className="page-container">
-      <div className="page-header">
-        <div className="flex items-center justify-between" style={{ flexWrap: "wrap", gap: 12 }}>
-          <div>
-            <h1 className="page-title">📅 Contest Schedule</h1>
-            {/* <p className="page-subtitle">Upcoming contests only: AtCoder Beginner Contest, CodeChef Starters, and Codeforces Div. 2/3/4</p> */}
-          </div>
-          <span className="badge badge-neutral">{contests.length} upcoming</span>
-        </div>
-      </div>
+      <ContestSubmissionSection contestCount={contests.length} showSubmission={!!session?.user} />
 
       {/* Platform filter */}
       <div className="flex gap-2" style={{ marginBottom: 24, flexWrap: "wrap" }}>

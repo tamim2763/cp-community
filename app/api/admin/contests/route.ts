@@ -4,7 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { adminErrorResponse } from "@/lib/api/admin";
 import { requireAdmin } from "@/lib/admin-guard";
 import { prisma } from "@/lib/prisma";
-import { contestSchema, deleteByIdSchema } from "@/lib/validations/admin";
+import { contestSchema, contestVisibilitySchema, deleteByIdSchema } from "@/lib/validations/admin";
 
 export async function GET() {
   try {
@@ -63,6 +63,25 @@ export async function DELETE(request: Request) {
     revalidateTag("public-contests");
 
     return NextResponse.json({ ok: true });
+  } catch (error) {
+    return adminErrorResponse(error);
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    await requireAdmin();
+    const body = contestVisibilitySchema.parse(await request.json());
+
+    const contest = await prisma.contest.update({
+      where: { id: body.id },
+      data: { isVisible: body.isVisible },
+    });
+
+    revalidatePath("/contests");
+    revalidateTag("public-contests");
+
+    return NextResponse.json({ ok: true, contest });
   } catch (error) {
     return adminErrorResponse(error);
   }
